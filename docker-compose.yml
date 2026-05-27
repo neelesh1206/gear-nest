@@ -1,0 +1,75 @@
+# Local development stack — see SPEC.md §15.1
+# Owner: Session 0. New dependencies require Session 0 sign-off via PR comment.
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./supabase/migrations:/docker-entrypoint-initdb.d:ro
+    environment:
+      POSTGRES_DB: gearnest
+      POSTGRES_USER: gearnest
+      POSTGRES_PASSWORD: gearnest_dev
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gearnest -d gearnest"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  pipeline:
+    build:
+      context: ./gear-nest-pipeline
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://gearnest:gearnest_dev@postgres:5432/gearnest
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: info
+    profiles: ["pipeline"]
+
+  api:
+    build:
+      context: ./gear-nest-api
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/gearnest
+      SPRING_DATASOURCE_USERNAME: gearnest
+      SPRING_DATASOURCE_PASSWORD: gearnest_dev
+      REDIS_URL: redis://redis:6379
+    profiles: ["api"]
+
+  web:
+    build:
+      context: ./gear-nest-web
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://api:8080
+    profiles: ["web"]
+
+volumes:
+  pgdata:

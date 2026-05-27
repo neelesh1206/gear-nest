@@ -1,0 +1,356 @@
+openapi: 3.1.0
+info:
+  title: GearNest API
+  version: 0.1.0
+  description: |
+    REST + SSE API for GearNest. This file is the contract between Session B
+    (implements) and Session C (consumes). Owned by Session 0 — changes
+    require Session 0 sign-off.
+
+    See SPEC.md §10 for endpoint narratives.
+  contact:
+    name: GearNest
+servers:
+  - url: http://localhost:8080
+    description: Local dev
+  - url: https://api.gearnest.io
+    description: Production
+
+tags:
+  - name: products
+  - name: prices
+  - name: reviews
+  - name: summary
+  - name: chat
+  - name: admin
+
+paths:
+  /api/v1/products/search:
+    get:
+      tags: [products]
+      summary: Search product catalog
+      parameters:
+        - { name: q,         in: query, schema: { type: string } }
+        - { name: category,  in: query, schema: { type: string } }
+        - { name: brand,     in: query, schema: { type: string }, description: "comma-separated" }
+        - { name: min_price, in: query, schema: { type: number, format: float } }
+        - { name: max_price, in: query, schema: { type: number, format: float } }
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [best_value, price_asc, rating_desc, relevance]
+            default: relevance
+        - { name: page, in: query, schema: { type: integer, default: 1,  minimum: 1 } }
+        - { name: size, in: query, schema: { type: integer, default: 24, minimum: 1, maximum: 100 } }
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductSearchResponse" }
+
+  /api/v1/products/{slug}:
+    get:
+      tags: [products]
+      summary: Product detail by slug
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Product detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProductDetail" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/products/{id}/prices:
+    get:
+      tags: [prices]
+      summary: Price comparison across stores
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Per-store pricing sorted by best-value score
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PriceComparisonResponse" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/products/{id}/reviews:
+    get:
+      tags: [reviews]
+      summary: Reviews aggregated by star tier
+      parameters:
+        - { name: id,   in: path,  required: true, schema: { type: string, format: uuid } }
+        - { name: tier, in: query, schema: { type: integer, minimum: 1, maximum: 5 } }
+        - { name: page, in: query, schema: { type: integer, default: 1, minimum: 1 } }
+        - { name: size, in: query, schema: { type: integer, default: 2, minimum: 1, maximum: 20 } }
+      responses:
+        "200":
+          description: Tiered review breakdown
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewBreakdown" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/products/{id}/summary:
+    get:
+      tags: [summary]
+      summary: AI-generated community verdict (cached)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Summary, pros, and cons
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AiSummary" }
+        "202":
+          description: Summary generating asynchronously
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/chat:
+    get:
+      tags: [chat]
+      summary: SSE chat — product-scoped RAG streaming
+      description: |
+        Server-Sent Events. Events:
+        - `token`        — incremental LLM output (string)
+        - `done`         — `{ remaining: int, sessionId: string }`
+        - `limit_reached`— `{}`
+        - `error`        — `{ budgetRestored: boolean }` when first-token timeout rolled back budget
+      parameters:
+        - { name: query,     in: query, required: true, schema: { type: string } }
+        - { name: productId, in: query, required: true, schema: { type: string, format: uuid } }
+        - name: gn_session
+          in: cookie
+          schema: { type: string }
+          description: Anonymous session cookie. Created server-side if absent.
+      responses:
+        "200":
+          description: text/event-stream
+          content:
+            text/event-stream:
+              schema: { type: string }
+
+  /api/admin/candidates:
+    get:
+      tags: [admin]
+      summary: List CANDIDATE listings awaiting review
+      responses:
+        "200":
+          description: Candidate listings
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/StoreListing" }
+
+  /api/admin/candidates/{listing_id}/confirm:
+    post:
+      tags: [admin]
+      summary: Promote CANDIDATE → MEDIUM (match is correct)
+      parameters:
+        - { name: listing_id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: Confirmed }
+
+  /api/admin/candidates/{listing_id}/reassign:
+    post:
+      tags: [admin]
+      summary: Reassign CANDIDATE to a different product (async)
+      parameters:
+        - { name: listing_id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_product_id]
+              properties:
+                target_product_id: { type: string, format: uuid }
+      responses:
+        "202":
+          description: Accepted; background job dispatched
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId: { type: string }
+
+components:
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:    { type: string }
+        message: { type: string }
+
+    Store:
+      type: object
+      required: [id, displayName]
+      properties:
+        id:          { type: string, example: rei }
+        displayName: { type: string, example: REI Co-op }
+        logoUrl:     { type: string, format: uri, nullable: true }
+
+    ProductCard:
+      type: object
+      required: [id, slug, name, brand, category]
+      properties:
+        id:               { type: string, format: uuid }
+        slug:             { type: string }
+        name:             { type: string }
+        brand:            { type: string }
+        category:         { type: string }
+        subcategory:      { type: string, nullable: true }
+        primaryImage:     { type: string, format: uri, nullable: true }
+        aggregateRating:  { $ref: "#/components/schemas/AggregateRating" }
+        lowestPrice:      { type: number, format: float, nullable: true }
+        currency:         { type: string, default: USD }
+
+    AggregateRating:
+      type: object
+      properties:
+        average: { type: number, format: float }
+        count:   { type: integer }
+
+    Facets:
+      type: object
+      properties:
+        brands:        { type: array, items: { $ref: "#/components/schemas/FacetBucket" } }
+        categories:    { type: array, items: { $ref: "#/components/schemas/FacetBucket" } }
+        priceRanges:   { type: array, items: { $ref: "#/components/schemas/FacetBucket" } }
+
+    FacetBucket:
+      type: object
+      required: [value, count]
+      properties:
+        value: { type: string }
+        count: { type: integer }
+
+    ProductSearchResponse:
+      type: object
+      required: [products, total, page, size]
+      properties:
+        products: { type: array, items: { $ref: "#/components/schemas/ProductCard" } }
+        total:    { type: integer }
+        page:     { type: integer }
+        size:     { type: integer }
+        facets:   { $ref: "#/components/schemas/Facets" }
+
+    ProductDetail:
+      type: object
+      required: [id, slug, name, brand, category, listings]
+      properties:
+        id:                  { type: string, format: uuid }
+        slug:                { type: string }
+        name:                { type: string }
+        brand:               { type: string }
+        category:            { type: string }
+        subcategory:         { type: string, nullable: true }
+        description:         { type: string, nullable: true }
+        specs:               { type: object, additionalProperties: true }
+        images:              { type: array, items: { type: string, format: uri } }
+        aggregateRating:     { $ref: "#/components/schemas/AggregateRating" }
+        listings:            { type: array, items: { $ref: "#/components/schemas/StoreListing" } }
+        pricesLastUpdated:   { type: string, format: date-time, nullable: true }
+        pricesNextUpdate:    { type: string, format: date-time, nullable: true }
+
+    StoreListing:
+      type: object
+      required: [id, store, storeProductId, storeUrl]
+      properties:
+        id:             { type: string, format: uuid }
+        store:          { $ref: "#/components/schemas/Store" }
+        storeProductId: { type: string }
+        storeUrl:       { type: string, format: uri }
+        affiliateUrl:   { type: string, format: uri, nullable: true }
+        price:          { type: number, format: float, nullable: true }
+        currency:       { type: string, default: USD }
+        inStock:        { type: boolean, nullable: true }
+        storeRating:    { type: number, format: float, nullable: true }
+        reviewCount:    { type: integer }
+        matchConfidence:
+          type: string
+          enum: [EXACT, HIGH, MEDIUM, CANDIDATE]
+        bestValueScore: { type: number, format: float, nullable: true }
+        isBestValue:    { type: boolean, default: false }
+        priceFetchedAt: { type: string, format: date-time, nullable: true }
+        isStale:        { type: boolean, default: false }
+
+    PriceComparisonResponse:
+      type: object
+      required: [listings]
+      properties:
+        listings:    { type: array, items: { $ref: "#/components/schemas/StoreListing" } }
+        lastUpdated: { type: string, format: date-time, nullable: true }
+        nextUpdate:  { type: string, format: date-time, nullable: true }
+
+    Review:
+      type: object
+      required: [id, rating, body, store]
+      properties:
+        id:                { type: string, format: uuid }
+        rating:            { type: integer, minimum: 1, maximum: 5 }
+        title:             { type: string, nullable: true }
+        body:              { type: string }
+        verifiedPurchase:  { type: boolean }
+        helpfulVotes:      { type: integer }
+        reviewDate:        { type: string, format: date, nullable: true }
+        store:             { $ref: "#/components/schemas/Store" }
+
+    ReviewTier:
+      type: object
+      required: [count, sample]
+      properties:
+        count:  { type: integer }
+        sample: { type: array, items: { $ref: "#/components/schemas/Review" } }
+
+    ReviewBreakdown:
+      type: object
+      required: [tiers, total]
+      properties:
+        tiers:
+          type: object
+          properties:
+            "1": { $ref: "#/components/schemas/ReviewTier" }
+            "2": { $ref: "#/components/schemas/ReviewTier" }
+            "3": { $ref: "#/components/schemas/ReviewTier" }
+            "4": { $ref: "#/components/schemas/ReviewTier" }
+            "5": { $ref: "#/components/schemas/ReviewTier" }
+        total: { type: integer }
+        storeBreakdown:
+          type: array
+          items:
+            type: object
+            properties:
+              store:     { $ref: "#/components/schemas/Store" }
+              count:     { type: integer }
+              avgRating: { type: number, format: float }
+
+    AiSummary:
+      type: object
+      required: [summary, pros, cons, reviewCount, generatedAt]
+      properties:
+        summary:     { type: string }
+        pros:        { type: array, items: { type: string } }
+        cons:        { type: array, items: { type: string } }
+        reviewCount: { type: integer }
+        generatedAt: { type: string, format: date-time }
