@@ -1,0 +1,91 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  review:
+    name: Claude review (scope + contract + ADR conformance)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout PR
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Auth + model pairing:
+      #   OAuth (Claude Max quota) → claude-opus-4-7    (active)
+      #   API key (per-token billing) → claude-haiku-4-5 (fallback if reverted)
+      - name: Claude Code Action Official
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          use_sticky_comment: "true"
+          track_progress: "false"
+          prompt: |
+            Review this GearNest PR. Post your final verdict as a single PR
+            comment using the sticky-comment mechanism — do not split into
+            multiple inline comments.
+
+            CONTEXT FILES (read only if needed for a specific check):
+            - root CLAUDE.md — scope rules
+            - SPEC.md §6 (schema), §10 (API), §11 (RAG), §18 (ADRs), §19 (parallel)
+            - docs/adr/0001 through 0012 — architectural invariants
+
+            CHECK 1 — SCOPE (BLOCKING)
+            Branch prefix dictates allowed paths:
+              feat/pipeline-* → only gear-nest-pipeline/ + CHANGELOG + README + adr/0013-0015
+              feat/api-*      → only gear-nest-api/      + CHANGELOG + README + adr/0016-0018
+              feat/web-*      → only gear-nest-web/      + CHANGELOG + README + adr/0019-0020
+              feat/contract-* → docs/, supabase/migrations/, root config, .github/, per-service CLAUDE.md
+            Any cross-track edit = BLOCKING.
+
+            CHECK 2 — CONTRACT (BLOCKING)
+            - Non-contract branches must NOT modify supabase/migrations/ or docs/api/openapi.yaml.
+            - API endpoints must match docs/api/openapi.yaml exactly (path, method, schema).
+
+            CHECK 3 — ADR INVARIANTS (BLOCKING)
+            - ADR-001: no HNSW on review_chunks/spec_chunks; btree(product_id) only; exact KNN.
+            - ADR-006: prices in Redis hashes, NOT columns on store_listings.
+            - ADR-007: 3-tier entity resolution; CANDIDATE rows never user-facing.
+            - ADR-008: RAG retrieval is stratified 5+3+2 (MMR + negatives + specs), not top-K.
+            - ADR-009: NO EXPIRE on Redis price keys; staleness via embedded fetched_at.
+            - ADR-010: price_history writes target monthly partition; partition DDL idempotent.
+            - ADR-011: MinHash dedup skips reviews <150 chars.
+
+            CHECK 4 — CODE QUALITY (non-blocking unless severe)
+            Bugs, race conditions, missing boundary validation, injection vectors, secret leaks.
+
+            CHECK 5 — CHANGELOG (non-blocking)
+            Appended one line: `YYYY-MM-DD · <service> · <feature> — summary`. Not rewritten.
+
+            OUTPUT — Post EXACTLY this format as the sticky comment:
+
+            **Verdict:** APPROVE | REQUEST CHANGES | COMMENT
+
+            | Check | Status |
+            | --- | --- |
+            | Scope | ✅ / ❌ + one-line reason |
+            | Contract | ✅ / ❌ + one-line reason |
+            | ADR | ✅ / ❌ + list violated ADR numbers |
+            | Code quality | ✅ / notable findings |
+            | CHANGELOG | ✅ / ❌ |
+
+            **Details:** (only if any ❌) — bulleted, max 5 bullets, each cites file:line.
+
+            Verdict = REQUEST CHANGES if any of Scope/Contract/ADR is ❌.
+            Verdict = APPROVE if all of Scope/Contract/ADR are ✅ and no severe code issues.
+            Verdict = COMMENT otherwise (minor nits).
+
+            Be terse. Cite SPEC sections or ADR numbers, don't paraphrase them.
+          claude_args: |
+            --model claude-opus-4-7
+            --max-turns 8
