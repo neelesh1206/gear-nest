@@ -86,17 +86,5 @@ jobs:
             Verdict = COMMENT otherwise (minor nits).
 
             Be terse. Cite SPEC sections or ADR numbers, don't paraphrase them.
-
-            TURN BUDGET: you have at most 20 tool turns. Spend them like this:
-              1. `git diff origin/main...HEAD --stat` to see what changed at a glance.
-              2. Read ONLY the files most likely to contain BLOCKING issues — schema,
-                 OpenAPI, files outside the branch's allowed scope, files implementing
-                 ADR-1/6/7/8/9/10/11 invariants.
-              3. Skip code-quality deep-reads if turns are running low — the BLOCKING
-                 checks (scope/contract/ADR) matter more than style nits.
-              4. Post the sticky comment before you hit turn 19. If you're at turn 18
-                 and still investigating, ship what you have with a note that the
-                 review was time-budget-truncated.
           claude_args: |
             --model claude-opus-4-7
-            --max-turns 20
