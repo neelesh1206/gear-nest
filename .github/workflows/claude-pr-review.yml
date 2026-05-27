@@ -21,6 +21,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Auth + model pairing:
+      #   OAuth (Claude Max quota) → claude-opus-4-7    (active)
+      #   API key (per-token billing) → claude-haiku-4-5 (fallback if reverted)
       - name: Claude Code Action Official
         uses: anthropics/claude-code-action@v1
         with:
@@ -106,4 +109,4 @@ jobs:
             If something is genuinely unclear from SPEC.md or the ADRs, say so
             rather than guessing.
           claude_args: |
-            --model claude-haiku-4-5
+            --model claude-opus-4-7
