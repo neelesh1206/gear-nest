@@ -24,7 +24,7 @@ jobs:
       - name: Claude Code Action Official
         uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: |
             You are reviewing a pull request against the GearNest monorepo. This
             repo is being built by three parallel Claude Code sessions (A/B/C) plus
@@ -106,4 +106,4 @@ jobs:
             If something is genuinely unclear from SPEC.md or the ADRs, say so
             rather than guessing.
           claude_args: |
-            --model claude-opus-4-7
+            --model claude-haiku-4-5
