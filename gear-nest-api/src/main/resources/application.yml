@@ -1,0 +1,41 @@
+spring:
+  application:
+    name: gear-nest-api
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/gearnest}
+    username: ${SPRING_DATASOURCE_USERNAME:gearnest}
+    password: ${SPRING_DATASOURCE_PASSWORD:gearnest_dev}
+    hikari:
+      maximum-pool-size: 10
+  data:
+    redis:
+      url: ${REDIS_URL:redis://localhost:6379}
+
+server:
+  port: 8080
+  shutdown: graceful
+
+gearnest:
+  session:
+    question-limit: ${SESSION_QUESTION_LIMIT:5}
+    ttl-hours: 2
+    inflight-ttl-seconds: 90
+  rag:
+    semantic-k: 5
+    negative-k: 3
+    spec-k: 2
+    overfetch: 20
+    mmr-lambda: 0.7
+    first-token-timeout-seconds: 30
+  huggingface:
+    api-key: ${HUGGINGFACE_API_KEY:}
+    embedding-model: ${HUGGINGFACE_EMBEDDING_MODEL:BAAI/bge-small-en-v1.5}
+    chat-model: ${HUGGINGFACE_LLM_MODEL:mistralai/Mistral-7B-Instruct-v0.3}
+    base-url: https://api-inference.huggingface.co
+
+logging:
+  level:
+    io.gearnest: INFO

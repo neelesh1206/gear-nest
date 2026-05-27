@@ -1,0 +1,27 @@
+#!/bin/sh
+# Apache Maven Wrapper startup script (only-script distribution)
+set -euf
+
+DIR=$(cd "$(dirname "$0")" && pwd)
+WRAPPER_PROPERTIES="$DIR/.mvn/wrapper/maven-wrapper.properties"
+
+distributionUrl=$(awk -F'=' '/^distributionUrl=/ {print $2}' "$WRAPPER_PROPERTIES")
+[ -n "$distributionUrl" ] || { echo "distributionUrl missing from $WRAPPER_PROPERTIES" >&2; exit 1; }
+
+MAVEN_HOME="${MAVEN_USER_HOME:-$HOME/.m2}/wrapper/dists/$(basename "$distributionUrl" .zip)"
+if [ ! -x "$MAVEN_HOME/bin/mvn" ]; then
+    mkdir -p "$MAVEN_HOME"
+    TMP_ZIP=$(mktemp)
+    if command -v curl >/dev/null 2>&1; then
+        curl -fsSL "$distributionUrl" -o "$TMP_ZIP"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -qO "$TMP_ZIP" "$distributionUrl"
+    else
+        echo "Need curl or wget to download Maven" >&2; exit 1
+    fi
+    (cd "$MAVEN_HOME" && unzip -q "$TMP_ZIP" && mv apache-maven-*/* . && rmdir apache-maven-*)
+    rm -f "$TMP_ZIP"
+    chmod +x "$MAVEN_HOME/bin/mvn"
+fi
+
+exec "$MAVEN_HOME/bin/mvn" "$@"
