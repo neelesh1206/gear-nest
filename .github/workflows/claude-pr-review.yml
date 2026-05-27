@@ -28,85 +28,64 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          use_sticky_comment: "true"
+          track_progress: "false"
           prompt: |
-            You are reviewing a pull request against the GearNest monorepo. This
-            repo is being built by three parallel Claude Code sessions (A/B/C) plus
-            a contract-track session (Session 0). Scope discipline is the highest
-            correctness invariant — more important than any individual code issue.
+            Review this GearNest PR. Post your final verdict as a single PR
+            comment using the sticky-comment mechanism — do not split into
+            multiple inline comments.
 
-            Review the PR in this exact order and STOP at the first BLOCKING finding.
+            CONTEXT FILES (read only if needed for a specific check):
+            - root CLAUDE.md — scope rules
+            - SPEC.md §6 (schema), §10 (API), §11 (RAG), §18 (ADRs), §19 (parallel)
+            - docs/adr/0001 through 0012 — architectural invariants
 
-            ── 1. SCOPE BOUNDARY CHECK (BLOCKING if violated) ──
-            Determine the PR's track from its branch name, then verify the diff
-            only touches the allowed paths:
+            CHECK 1 — SCOPE (BLOCKING)
+            Branch prefix dictates allowed paths:
+              feat/pipeline-* → only gear-nest-pipeline/ + CHANGELOG + README + adr/0013-0015
+              feat/api-*      → only gear-nest-api/      + CHANGELOG + README + adr/0016-0018
+              feat/web-*      → only gear-nest-web/      + CHANGELOG + README + adr/0019-0020
+              feat/contract-* → docs/, supabase/migrations/, root config, .github/, per-service CLAUDE.md
+            Any cross-track edit = BLOCKING.
 
-              feat/pipeline-*    → only gear-nest-pipeline/, CHANGELOG.md
-                                   (Pipeline section), README.md (Pipeline section),
-                                   docs/adr/0013-0015
-              feat/api-*         → only gear-nest-api/, CHANGELOG.md (API section),
-                                   README.md (API section), docs/adr/0016-0018
-              feat/web-*         → only gear-nest-web/, CHANGELOG.md (Web section),
-                                   README.md (Web section), docs/adr/0019-0020
-              feat/contract-*    → docs/, supabase/migrations/, root config files,
-                                   per-service CLAUDE.md, .github/workflows/
+            CHECK 2 — CONTRACT (BLOCKING)
+            - Non-contract branches must NOT modify supabase/migrations/ or docs/api/openapi.yaml.
+            - API endpoints must match docs/api/openapi.yaml exactly (path, method, schema).
 
-            Cross-track edits are BLOCKING. Reference the rules in CLAUDE.md (root)
-            and the per-service CLAUDE.md files.
+            CHECK 3 — ADR INVARIANTS (BLOCKING)
+            - ADR-001: no HNSW on review_chunks/spec_chunks; btree(product_id) only; exact KNN.
+            - ADR-006: prices in Redis hashes, NOT columns on store_listings.
+            - ADR-007: 3-tier entity resolution; CANDIDATE rows never user-facing.
+            - ADR-008: RAG retrieval is stratified 5+3+2 (MMR + negatives + specs), not top-K.
+            - ADR-009: NO EXPIRE on Redis price keys; staleness via embedded fetched_at.
+            - ADR-010: price_history writes target monthly partition; partition DDL idempotent.
+            - ADR-011: MinHash dedup skips reviews <150 chars.
 
-            ── 2. CONTRACT CONFORMANCE (BLOCKING if violated) ──
-            - If the PR modifies supabase/migrations/ and is NOT on a contract
-              branch → BLOCKING. Schema changes must come through Session 0.
-            - If the PR modifies docs/api/openapi.yaml and is NOT on a contract
-              branch → BLOCKING.
-            - API endpoints in gear-nest-api/ must match docs/api/openapi.yaml
-              exactly (paths, methods, request/response shapes). Flag drift.
-            - Web fetch calls in gear-nest-web/ must use types derived from the
-              same OpenAPI spec. Flag any inline ad-hoc types.
+            CHECK 4 — CODE QUALITY (non-blocking unless severe)
+            Bugs, race conditions, missing boundary validation, injection vectors, secret leaks.
 
-            ── 3. ADR COMPLIANCE (BLOCKING if violated) ──
-            Check the PR against docs/adr/0001-0012:
-            - ADR-001: No HNSW index on review_chunks or spec_chunks. Btree on
-              product_id only. Exact KNN in queries.
-            - ADR-006: Mutable prices live in Redis hashes, never as columns on
-              store_listings or as UPDATEs to a price column.
-            - ADR-007: Entity resolution must use three tiers; CANDIDATE rows
-              must never surface in user-facing endpoints.
-            - ADR-008: RAG retrieval must be stratified (5 MMR + 3 negative +
-              2 spec), not pure top-K cosine.
-            - ADR-009: Redis price keys must have NO EXPIRE. Staleness is
-              application-managed via embedded fetched_at timestamp.
-            - ADR-010: price_history inserts must target the correct monthly
-              partition; partition creation must be idempotent DDL at startup.
-            - ADR-011: MinHash Stage 2 dedup must skip reviews < 150 chars.
+            CHECK 5 — CHANGELOG (non-blocking)
+            Appended one line: `YYYY-MM-DD · <service> · <feature> — summary`. Not rewritten.
 
-            ── 4. CODE QUALITY (non-blocking unless severe) ──
-            - Bugs, edge cases, race conditions
-            - Missing validation at system boundaries (user input, external APIs)
-            - Security: command injection, SQL injection, XSS, secret exposure
-            - Per-language style: cargo clippy clean for Rust, no `any` in TS,
-              records + virtual threads in Java
-
-            ── 5. CHANGELOG DISCIPLINE (non-blocking but call out) ──
-            - PR appends one line per artifact at the bottom of CHANGELOG.md
-            - Format: `YYYY-MM-DD · <service> · <feature> — one-line summary`
-            - Never rewrites or reorders existing entries
-
-            ── OUTPUT FORMAT ──
-            Post ONE review comment with these sections:
+            OUTPUT — Post EXACTLY this format as the sticky comment:
 
             **Verdict:** APPROVE | REQUEST CHANGES | COMMENT
 
-            **Scope check:** ✅ / ❌ (one line)
-            **Contract check:** ✅ / ❌ (one line)
-            **ADR check:** ✅ / ❌ (list any violations)
-            **Code quality:** notable findings, bulleted
-            **CHANGELOG:** ✅ / ❌
+            | Check | Status |
+            | --- | --- |
+            | Scope | ✅ / ❌ + one-line reason |
+            | Contract | ✅ / ❌ + one-line reason |
+            | ADR | ✅ / ❌ + list violated ADR numbers |
+            | Code quality | ✅ / notable findings |
+            | CHANGELOG | ✅ / ❌ |
 
-            Use "REQUEST CHANGES" if ANY of sections 1-3 fail. Use "APPROVE" only
-            when 1-3 are clean and code quality has no severe issues. Use "COMMENT"
-            for minor style nits only.
+            **Details:** (only if any ❌) — bulleted, max 5 bullets, each cites file:line.
 
-            If something is genuinely unclear from SPEC.md or the ADRs, say so
-            rather than guessing.
+            Verdict = REQUEST CHANGES if any of Scope/Contract/ADR is ❌.
+            Verdict = APPROVE if all of Scope/Contract/ADR are ✅ and no severe code issues.
+            Verdict = COMMENT otherwise (minor nits).
+
+            Be terse. Cite SPEC sections or ADR numbers, don't paraphrase them.
           claude_args: |
             --model claude-opus-4-7
+            --max-turns 8
