@@ -18,3 +18,4 @@ Append only. Never rewrite or reorder. Per-service section ownership:
 - **2026-05-27 · contract · openapi-spec** — `docs/api/openapi.yaml` covering all Phase 1 endpoints (search, detail, prices, reviews, summary, chat SSE).
 - **2026-05-27 · contract · service-claude-md** — Per-service CLAUDE.md scope files for pipeline, api, web (SPEC §19.6).
 - **2026-05-27 · contract · adr-stubs** — ADR-001 through ADR-012 transcribed from SPEC §18; ADR-013 through ADR-020 reserved as empty stubs (Pipeline 013-015, API 016-018, Web 019-020).
+- **2026-05-27 · contract · claude-pr-review** — GitHub Actions workflow `.github/workflows/claude-pr-review.yml` invokes `anthropics/claude-code-action@v1` on pull_request open/sync/reopen. Prompt enforces scope boundaries, OpenAPI/schema contract conformance, ADR compliance (1-12), and CHANGELOG discipline. Auto-merge intentionally not enabled — manual merge after review.
