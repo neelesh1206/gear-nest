@@ -4,7 +4,7 @@
 //! and calls the `GetItems` operation against the configured PA-API host.
 //! See <https://webservices.amazon.com/paapi5/documentation/>.
 //!
-//! The PA-API GetItems request accepts up to **10 ItemIds** per call. Above
+//! The PA-API `GetItems` request accepts up to **10 `ItemIds`** per call. Above
 //! that the API returns `RequestThrottled`. We chunk callers' batches into
 //! groups of 10 and merge results.
 
@@ -93,7 +93,10 @@ impl AmazonScraper {
         });
         let body_bytes = serde_json::to_vec(&body)?;
 
-        let url = format!("{}://{}{}", self.config.scheme, self.config.host, OPERATION_PATH);
+        let url = format!(
+            "{}://{}{}",
+            self.config.scheme, self.config.host, OPERATION_PATH
+        );
         let now = Utc::now();
         let amz_date = now.format("%Y%m%dT%H%M%SZ").to_string();
         let date_stamp = now.format("%Y%m%d").to_string();
@@ -148,19 +151,25 @@ impl StoreCrawler for AmazonScraper {
             let resp = self.get_items(&chunk_vec).await?;
             if let Some(errs) = &resp.errors {
                 for e in errs {
-                    warn!(code = e.code.as_str(), message = e.message.as_str(), "PA-API error");
+                    warn!(
+                        code = e.code.as_str(),
+                        message = e.message.as_str(),
+                        "PA-API error"
+                    );
                 }
             }
-            let Some(payload) = resp.items_result else { continue };
+            let Some(payload) = resp.items_result else {
+                continue;
+            };
             for item in payload.items {
-                out.push(item_to_raw(item));
+                out.push(item_to_raw(&item));
             }
         }
         Ok(out)
     }
 }
 
-fn item_to_raw(item: PaapiItem) -> RawProduct {
+fn item_to_raw(item: &PaapiItem) -> RawProduct {
     let title = item
         .item_info
         .as_ref()
@@ -227,7 +236,7 @@ fn item_to_raw(item: PaapiItem) -> RawProduct {
         .and_then(|c| c.count)
         .unwrap_or(0);
 
-    let raw_payload = serde_json::to_value(&item).unwrap_or(serde_json::Value::Null);
+    let raw_payload = serde_json::to_value(item).unwrap_or(serde_json::Value::Null);
 
     RawProduct {
         store_id: STORE_ID.into(),
@@ -238,7 +247,7 @@ fn item_to_raw(item: PaapiItem) -> RawProduct {
         category_path,
         description,
         features,
-        specs: serde_json::Value::Object(Default::default()),
+        specs: serde_json::Value::Object(serde_json::Map::new()),
         primary_image,
         gtin,
         price: price_amount,
@@ -269,16 +278,18 @@ fn sign_v4(
     let canonical_headers = format!(
         "content-encoding:amz-1.0\nhost:{host}\nx-amz-date:{amz_date}\nx-amz-target:{TARGET}\n"
     );
-    let canonical_request = format!(
-        "POST\n{path}\n\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
-    );
+    let canonical_request =
+        format!("POST\n{path}\n\n{canonical_headers}\n{signed_headers}\n{payload_hash}");
     let scope = format!("{date_stamp}/{region}/{SERVICE}/aws4_request");
     let string_to_sign = format!(
         "AWS4-HMAC-SHA256\n{amz_date}\n{scope}\n{}",
         hex_sha256(canonical_request.as_bytes())
     );
 
-    let k_date = hmac(format!("AWS4{secret_key}").as_bytes(), date_stamp.as_bytes());
+    let k_date = hmac(
+        format!("AWS4{secret_key}").as_bytes(),
+        date_stamp.as_bytes(),
+    );
     let k_region = hmac(&k_date, region.as_bytes());
     let k_service = hmac(&k_region, SERVICE.as_bytes());
     let k_signing = hmac(&k_service, b"aws4_request");
@@ -516,7 +527,7 @@ mod tests {
             offers: None,
             customer_reviews: None,
         };
-        let raw = item_to_raw(item);
+        let raw = item_to_raw(&item);
         assert_eq!(raw.store_id, "amazon");
         assert_eq!(raw.store_product_id, "B0EXAMPLE");
         assert_eq!(raw.title, "MSR PocketRocket 2 Stove");

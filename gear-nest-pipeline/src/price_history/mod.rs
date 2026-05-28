@@ -35,8 +35,7 @@ pub async fn ensure_partitions(pool: &PgPool, anchor: DateTime<Utc>) -> Result<(
         let sql = format!(
             "CREATE TABLE IF NOT EXISTS {name} \
              PARTITION OF price_history \
-             FOR VALUES FROM ('{}') TO ('{}')",
-            start, end
+             FOR VALUES FROM ('{start}') TO ('{end}')"
         );
         debug!(partition = %name, "ensure_partitions DDL");
         sqlx::query(&sql)
@@ -69,9 +68,8 @@ pub async fn append_many(pool: &PgPool, recs: &[PriceRecord]) -> Result<u64> {
     if recs.is_empty() {
         return Ok(0);
     }
-    let mut sql = String::from(
-        "INSERT INTO price_history (listing_id, price, in_stock, fetched_at) VALUES ",
-    );
+    let mut sql =
+        String::from("INSERT INTO price_history (listing_id, price, in_stock, fetched_at) VALUES ");
     let mut placeholders: Vec<String> = Vec::with_capacity(recs.len());
     for i in 0..recs.len() {
         let b = i * 4;
@@ -110,12 +108,14 @@ pub async fn latest_for_listing(pool: &PgPool, listing_id: Uuid) -> Result<Optio
     .bind(listing_id)
     .fetch_optional(pool)
     .await?;
-    Ok(row.map(|(listing_id, price, in_stock, fetched_at)| PriceRecord {
-        listing_id,
-        price,
-        in_stock,
-        fetched_at,
-    }))
+    Ok(
+        row.map(|(listing_id, price, in_stock, fetched_at)| PriceRecord {
+            listing_id,
+            price,
+            in_stock,
+            fetched_at,
+        }),
+    )
 }
 
 fn month_start(d: NaiveDate) -> NaiveDate {
@@ -126,6 +126,9 @@ fn previous_month_start(d: NaiveDate) -> NaiveDate {
     add_months(month_start(d), -1)
 }
 
+// `month()` is always 1..=12 and the loops keep `month` in 1..=12, so the
+// u32<->i32 casts can neither wrap nor lose sign.
+#[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
 fn add_months(d: NaiveDate, months: i32) -> NaiveDate {
     let mut year = d.year();
     let mut month = d.month() as i32 + months;

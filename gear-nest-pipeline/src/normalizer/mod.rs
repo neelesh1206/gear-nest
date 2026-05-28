@@ -14,7 +14,9 @@ pub mod text;
 
 pub fn normalize(raw: &RawProduct) -> NormalizedProduct {
     let canonical_brand = brand::canonicalize(raw.brand.as_deref().unwrap_or(""));
-    let canonical_brand = if canonical_brand.is_empty() {
+    // canonicalize returns Some("") (never None) when there's no brand, so check
+    // for an empty value — not is_none() — to trigger title-based inference.
+    let canonical_brand = if canonical_brand.as_deref().unwrap_or("").is_empty() {
         brand::infer_from_title(&raw.title)
     } else {
         canonical_brand

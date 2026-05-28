@@ -1,9 +1,10 @@
-//! HuggingFace Inference API embedding client + pgvector bulk insert.
+//! `HuggingFace` Inference API embedding client + pgvector bulk insert.
 //!
 //! Phase 1 wires the data path; HNSW is intentionally absent (ADR-001), the
 //! chunk tables have a plain btree on `product_id` and chat does exact KNN
 //! over the ~75 rows per product.
 
+use std::fmt::Write as _;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -31,7 +32,9 @@ pub struct HuggingFaceEmbedder {
     base_url: String,
 }
 
-const DEFAULT_HF_BASE_URL: &str = "https://api-inference.huggingface.co";
+// HF retired api-inference.huggingface.co; embeddings route through the
+// Inference Providers router (hf-inference provider).
+const DEFAULT_HF_BASE_URL: &str = "https://router.huggingface.co";
 
 impl HuggingFaceEmbedder {
     pub fn new(token: Option<String>, model: String) -> Result<Self> {
@@ -56,7 +59,7 @@ impl HuggingFaceEmbedder {
         })
     }
 
-    /// Embed an arbitrary number of inputs by batching into BATCH_SIZE chunks.
+    /// Embed an arbitrary number of inputs by batching into `BATCH_SIZE` chunks.
     /// Returns vectors in the same order as the inputs.
     pub async fn embed(&self, inputs: &[String]) -> Result<Vec<Vec<f32>>> {
         if inputs.is_empty() {
@@ -72,18 +75,22 @@ impl HuggingFaceEmbedder {
 
     async fn embed_chunk(&self, inputs: &[String]) -> Result<Vec<Vec<f32>>> {
         let url = format!(
-            "{}/pipeline/feature-extraction/{}",
+            "{}/hf-inference/models/{}/pipeline/feature-extraction",
             self.base_url.trim_end_matches('/'),
             self.model
         );
-        let body = json!({ "inputs": inputs, "options": { "wait_for_model": true } });
+        let body = json!({ "inputs": inputs });
 
         let mut req = self.client.post(&url).json(&body);
         if let Some(t) = self.token.as_deref() {
             req = req.bearer_auth(t);
         }
 
-        debug!(model = self.model.as_str(), count = inputs.len(), "HF embed");
+        debug!(
+            model = self.model.as_str(),
+            count = inputs.len(),
+            "HF embed"
+        );
         let resp = req.send().await.context("HF embed request failed")?;
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
@@ -163,7 +170,11 @@ pub async fn insert_review_chunks(
     if rows.is_empty() {
         return Ok(0);
     }
-    assert_eq!(rows.len(), embeddings.len(), "rows/embeddings length mismatch");
+    assert_eq!(
+        rows.len(),
+        embeddings.len(),
+        "rows/embeddings length mismatch"
+    );
 
     let mut sql = String::from(
         "INSERT INTO review_chunks \
@@ -197,7 +208,10 @@ pub async fn insert_review_chunks(
             .bind(row.store_id.as_deref());
     }
     let result = q.execute(pool).await?;
-    info!(inserted = result.rows_affected(), "review_chunks bulk insert");
+    info!(
+        inserted = result.rows_affected(),
+        "review_chunks bulk insert"
+    );
     Ok(result.rows_affected())
 }
 
@@ -210,7 +224,11 @@ pub async fn insert_spec_chunks(
     if rows.is_empty() {
         return Ok(0);
     }
-    assert_eq!(rows.len(), embeddings.len(), "rows/embeddings length mismatch");
+    assert_eq!(
+        rows.len(),
+        embeddings.len(),
+        "rows/embeddings length mismatch"
+    );
 
     let mut sql = String::from(
         "INSERT INTO spec_chunks \
@@ -253,7 +271,7 @@ fn vector_literal(v: &[f32]) -> String {
             s.push(',');
         }
         // Pgvector accepts any float repr; default precision is fine.
-        s.push_str(&format!("{x}"));
+        let _ = write!(s, "{x}");
     }
     s.push(']');
     s
@@ -276,7 +294,7 @@ pub async fn embed_and_insert_product_specs(
             rows.push(SpecChunkInsert {
                 product_id,
                 chunk_text: chunk_text.clone(),
-                chunk_index: idx as i16,
+                chunk_index: i16::try_from(idx).unwrap_or(i16::MAX),
                 source_type: SpecSource::Description,
             });
             texts.push(chunk_text);
@@ -286,7 +304,7 @@ pub async fn embed_and_insert_product_specs(
         rows.push(SpecChunkInsert {
             product_id,
             chunk_text: feat.clone(),
-            chunk_index: (rows.len() + idx) as i16,
+            chunk_index: i16::try_from(rows.len() + idx).unwrap_or(i16::MAX),
             source_type: SpecSource::Features,
         });
         texts.push(feat.clone());

@@ -26,21 +26,21 @@ struct Migration {
 
 pub async fn run(pool: &PgPool, dir: &Path) -> Result<()> {
     sqlx::query(
-        r#"
+        r"
         CREATE TABLE IF NOT EXISTS _gn_migrations (
             version     BIGINT PRIMARY KEY,
             name        TEXT NOT NULL,
             checksum    TEXT NOT NULL,
             applied_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
-        "#,
+        ",
     )
     .execute(pool)
     .await
     .context("creating _gn_migrations table")?;
 
-    let migrations = discover(dir)
-        .with_context(|| format!("scanning migrations in {}", dir.display()))?;
+    let migrations =
+        discover(dir).with_context(|| format!("scanning migrations in {}", dir.display()))?;
 
     if migrations.is_empty() {
         warn!("no migration files found in {}", dir.display());

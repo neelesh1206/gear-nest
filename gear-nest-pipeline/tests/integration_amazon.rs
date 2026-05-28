@@ -1,20 +1,29 @@
 //! End-to-end: scrape 50 Amazon products → normalize → resolve → embed → DB.
 //!
 //! Marked `#[ignore]` because it needs a running Postgres + Redis. CI invokes
-//! it explicitly with `cargo test -- --ignored`. The PA-API and HuggingFace
+//! it explicitly with `cargo test -- --ignored`. The PA-API and `HuggingFace`
 //! endpoints are stubbed with `wiremock`, so the test does not need real
 //! Amazon/HF credentials.
 //!
 //! Required env (compose-up defaults work):
-//!     DATABASE_URL=postgresql://gearnest:gearnest_dev@localhost:5432/gearnest
-//!     REDIS_URL=redis://localhost:6379
+//!     `DATABASE_URL=postgresql://gearnest:gearnest_dev@localhost:5432/gearnest`
+//!     `REDIS_URL=redis://localhost:6379`
+
+// Test code: count/index casts in assertions and a long end-to-end test body
+// are fine here. Production code keeps clippy::pedantic strict.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::similar_names,
+    clippy::too_many_lines
+)]
 
 use std::env;
 
 use chrono::Utc;
 use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
-use uuid::Uuid;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -23,8 +32,7 @@ use gear_nest_pipeline::{
     db,
     embeddings::HuggingFaceEmbedder,
     entity_resolution::Resolver,
-    normalizer,
-    price_history,
+    normalizer, price_history,
     scrapers::{amazon::AmazonScraper, ensure_scrape_audit, record_raw, StoreCrawler},
 };
 
@@ -63,7 +71,11 @@ async fn scrape_50_amazon_products_end_to_end() {
             let requested: Vec<String> = body
                 .get("ItemIds")
                 .and_then(|v| v.as_array())
-                .map(|arr| arr.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|x| x.as_str().map(str::to_string))
+                        .collect()
+                })
                 .unwrap_or_default();
             ResponseTemplate::new(200).set_body_json(fake_paapi_response(&requested))
         })
@@ -95,8 +107,7 @@ async fn scrape_50_amazon_products_end_to_end() {
             let n = body
                 .get("inputs")
                 .and_then(|v| v.as_array())
-                .map(|a| a.len())
-                .unwrap_or(1);
+                .map_or(1, std::vec::Vec::len);
             let vectors: Vec<Vec<f32>> = (0..n).map(|_| vec![0.0_f32; 384]).collect();
             ResponseTemplate::new(200).set_body_json(vectors)
         })
@@ -173,7 +184,10 @@ async fn scrape_50_amazon_products_end_to_end() {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert!(spec_chunks >= PRODUCT_COUNT as i64, "≥1 spec chunk per product");
+    assert!(
+        spec_chunks >= PRODUCT_COUNT as i64,
+        "≥1 spec chunk per product"
+    );
 
     // Confidence distribution: all 50 are net-new, so all EXACT.
     let (exact,): (i64,) = sqlx::query_as(
@@ -196,16 +210,20 @@ async fn clean_fixture_rows(pool: &sqlx::PgPool, asins: &[String]) {
     .execute(pool)
     .await
     .ok();
-    sqlx::query("DELETE FROM store_listings WHERE store_id = 'amazon' AND store_product_id = ANY($1)")
-        .bind(asins)
-        .execute(pool)
-        .await
-        .ok();
-    sqlx::query("DELETE FROM _gn_scrape_audit WHERE store_id = 'amazon' AND store_product_id = ANY($1)")
-        .bind(asins)
-        .execute(pool)
-        .await
-        .ok();
+    sqlx::query(
+        "DELETE FROM store_listings WHERE store_id = 'amazon' AND store_product_id = ANY($1)",
+    )
+    .bind(asins)
+    .execute(pool)
+    .await
+    .ok();
+    sqlx::query(
+        "DELETE FROM _gn_scrape_audit WHERE store_id = 'amazon' AND store_product_id = ANY($1)",
+    )
+    .bind(asins)
+    .execute(pool)
+    .await
+    .ok();
 }
 
 fn fake_paapi_response(requested: &[String]) -> Value {
@@ -232,8 +250,13 @@ fn fake_paapi_response(requested: &[String]) -> Value {
 
     let items: Vec<Value> = requested
         .iter()
-        .enumerate()
-        .map(|(idx, asin)| {
+        .map(|asin| {
+            // Derive the fixture index from the ASIN itself (B0FIXT0011 → 11), not
+            // from position-in-batch: PA-API is called in chunks of 10, so an
+            // `enumerate()` index would repeat 0..9 every batch and emit duplicate
+            // GTINs/titles — which entity resolution then (correctly) merges,
+            // collapsing 50 ASINs into 10 products.
+            let idx: usize = asin.strip_prefix("B0FIXT").and_then(|s| s.parse().ok()).unwrap_or(0);
             let brand = brands[idx % brands.len()];
             let cat = categories[idx % categories.len()];
             let price = 19.99 + (idx as f64) * 7.5;

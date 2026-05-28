@@ -1,7 +1,6 @@
 //! Title cleanup + canonical-key construction.
 
 use deunicode::deunicode;
-use once_cell::sync::Lazy;
 use regex::Regex;
 use unicode_normalization::UnicodeNormalization;
 
@@ -20,7 +19,9 @@ pub fn clean_title(title: &str, canonical_brand: Option<&str>) -> String {
         let needle = canon.replace('-', " ");
         let lower = s.to_lowercase();
         if lower.starts_with(&needle) {
-            s = s[needle.len()..].trim_start_matches([':', '—', '-', ' ']).to_string();
+            s = s[needle.len()..]
+                .trim_start_matches([':', '—', '-', ' '])
+                .to_string();
         }
     }
     s
@@ -28,7 +29,7 @@ pub fn clean_title(title: &str, canonical_brand: Option<&str>) -> String {
 
 /// Extract a probable model token by collecting every word that contains
 /// at least one digit and joining them with hyphens. Model numbers reliably
-/// contain digits ("UL2", "X-Drive7", "PocketRocket2", "BR-3000"); pure
+/// contain digits ("UL2", "X-Drive7", "`PocketRocket2`", "BR-3000"); pure
 /// letter sequences are too ambiguous to be model identifiers and fall
 /// through to Tier 3 embedding similarity.
 pub fn extract_model_token(title: &str) -> Option<String> {
@@ -64,15 +65,18 @@ pub fn slugify(input: &str) -> String {
     cleaned.trim_matches('-').to_string()
 }
 
-static PARENS_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s*\([^)]*\)\s*$").unwrap());
-static WHITESPACE_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s+").unwrap());
-static MODEL_RE: Lazy<Regex> = Lazy::new(|| {
+static PARENS_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"\s*\([^)]*\)\s*$").unwrap());
+static WHITESPACE_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"\s+").unwrap());
+static MODEL_RE: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
     // Hyphenated alphanum with a digit (BR-3000) or any word containing
     // at least one digit (PocketRocket2, UL2, X005). Letter-only tokens
     // are intentionally excluded — they are too ambiguous to identify a model.
     Regex::new(r"\b(?:[A-Za-z]+-\d+|[A-Za-z]*\d+[A-Za-z0-9]*)\b").unwrap()
 });
-static SLUG_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"[^a-z0-9]+").unwrap());
+static SLUG_RE: std::sync::LazyLock<Regex> =
+    std::sync::LazyLock::new(|| Regex::new(r"[^a-z0-9]+").unwrap());
 
 #[cfg(test)]
 mod tests {
@@ -80,7 +84,10 @@ mod tests {
 
     #[test]
     fn clean_title_strips_brand_prefix_and_parens() {
-        let out = clean_title("MSR PocketRocket 2 Stove (Backpacking, Camping)", Some("msr"));
+        let out = clean_title(
+            "MSR PocketRocket 2 Stove (Backpacking, Camping)",
+            Some("msr"),
+        );
         assert_eq!(out, "PocketRocket 2 Stove");
     }
 
