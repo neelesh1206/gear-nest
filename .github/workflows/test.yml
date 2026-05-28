@@ -4,6 +4,11 @@ on:
   pull_request:
     branches: [main]
 
+# Cancel superseded runs when a PR is pushed again — saves CI minutes + review quota.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   pull-requests: read
