@@ -12,6 +12,7 @@ To prevent renumber conflicts across parallel Claude sessions, ADR numbers are p
 | 013–015 | Pipeline | Session A |
 | 016–018 | API | Session B |
 | 019–020 | Web | Session C |
+| 021+ | Contract / ongoing | Session 0 |
 
 Sessions claim a reserved number and fill in content. They do **not** renumber.
 
@@ -37,3 +38,4 @@ Sessions claim a reserved number and fill in content. They do **not** renumber.
 - [0018 — *reserved (API)*](./0018-reserved-api.md)
 - [0019 — *reserved (Web)*](./0019-reserved-web.md)
 - [0020 — *reserved (Web)*](./0020-reserved-web.md)
+- [0021 — Redis price schema is a pinned cross-service contract](./0021-redis-schema-contract.md)
