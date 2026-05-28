@@ -19,7 +19,10 @@ if [ ! -x "$MAVEN_HOME/bin/mvn" ]; then
     else
         echo "Need curl or wget to download Maven" >&2; exit 1
     fi
-    (cd "$MAVEN_HOME" && unzip -q "$TMP_ZIP" && mv apache-maven-*/* . && rmdir apache-maven-*)
+    # set +f re-enables globbing inside this subshell — the parent runs with
+    # `set -f` (noglob), under which `apache-maven-*/*` would not expand and the
+    # mv would fail with "cannot stat 'apache-maven-*/*'".
+    (set +f; cd "$MAVEN_HOME" && unzip -q "$TMP_ZIP" && mv apache-maven-*/* . && rmdir apache-maven-*)
     rm -f "$TMP_ZIP"
     chmod +x "$MAVEN_HOME/bin/mvn"
 fi

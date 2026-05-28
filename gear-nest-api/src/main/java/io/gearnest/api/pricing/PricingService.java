@@ -1,5 +1,8 @@
 package io.gearnest.api.pricing;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.gearnest.api.product.dto.PriceComparisonResponse;
 import io.gearnest.api.product.dto.StoreListing;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -18,17 +21,22 @@ import java.util.UUID;
 @Service
 public class PricingService {
 
-    static final Duration STALE_THRESHOLD = Duration.ofHours(25);
+    // Must match the pipeline's staleness rule (gear-nest-pipeline/src/prices/mod.rs):
+    // a snapshot is stale when now - fetched_at > 24h + jitter_secs. The per-key
+    // jitter is read from the payload so reader and writer agree exactly.
+    static final Duration STALE_BASE = Duration.ofHours(24);
     static final Duration NEXT_UPDATE_WINDOW = Duration.ofHours(24);
 
     private final PricingRepository repo;
     private final StringRedisTemplate redis;
     private final BestValueScorer scorer;
+    private final ObjectMapper json;
 
-    public PricingService(PricingRepository repo, StringRedisTemplate redis, BestValueScorer scorer) {
+    public PricingService(PricingRepository repo, StringRedisTemplate redis, BestValueScorer scorer, ObjectMapper json) {
         this.repo = repo;
         this.redis = redis;
         this.scorer = scorer;
+        this.json = json;
     }
 
     public PriceComparisonResponse comparisonFor(UUID productId) {
@@ -44,7 +52,7 @@ public class PricingService {
         OffsetDateTime latestFetch = null;
 
         for (StaticListing s : statics) {
-            PriceSnapshot snap = readSnapshot(s.id());
+            PriceSnapshot snap = readSnapshot(productId, s.store().id());
             Float price;
             Boolean inStock;
             OffsetDateTime fetchedAt;
@@ -54,7 +62,8 @@ public class PricingService {
                 price = snap.price();
                 inStock = snap.inStock();
                 fetchedAt = snap.fetchedAt();
-                stale = fetchedAt != null && fetchedAt.isBefore(OffsetDateTime.now(ZoneOffset.UTC).minus(STALE_THRESHOLD));
+                stale = fetchedAt != null && fetchedAt.isBefore(
+                    OffsetDateTime.now(ZoneOffset.UTC).minus(STALE_BASE).minusSeconds(snap.jitterSecs()));
             } else {
                 PricingRepository.HistoricalPrice h = fallback.get(s.id());
                 price = h == null ? null : h.price();
@@ -81,18 +90,12 @@ public class PricingService {
     public Map<UUID, Float> lowestPrices(List<UUID> productIds) {
         if (productIds.isEmpty()) return Map.of();
         Map<UUID, Float> live = new HashMap<>();
-        List<UUID> listingProductMap = new ArrayList<>();
-        Map<UUID, UUID> listingToProduct = new HashMap<>();
         for (UUID pid : productIds) {
             for (StaticListing s : repo.listingsForProduct(pid)) {
-                listingToProduct.put(s.id(), pid);
-                listingProductMap.add(s.id());
+                PriceSnapshot snap = readSnapshot(pid, s.store().id());
+                if (snap == null || snap.price() == null) continue;
+                live.merge(pid, snap.price(), Math::min);
             }
-        }
-        for (Map.Entry<UUID, UUID> e : listingToProduct.entrySet()) {
-            PriceSnapshot snap = readSnapshot(e.getKey());
-            if (snap == null || snap.price() == null) continue;
-            live.merge(e.getValue(), snap.price(), Math::min);
         }
         Map<UUID, Float> fallback = repo.lowestPricesForProducts(productIds);
         for (UUID pid : productIds) {
@@ -103,22 +106,27 @@ public class PricingService {
         return live;
     }
 
-    private PriceSnapshot readSnapshot(UUID listingId) {
-        String key = "price:listing:" + listingId;
-        Map<Object, Object> hash;
+    // Reads the price the pipeline writes (see docs/contracts/redis-schema.md):
+    //   key   = prices:{product_id}
+    //   field = {store_id}
+    //   value = JSON {listing_id, price, in_stock, fetched_at, jitter_secs}
+    private PriceSnapshot readSnapshot(UUID productId, String storeId) {
+        String key = "prices:" + productId;
+        Object raw;
         try {
-            hash = redis.opsForHash().entries(key);
+            raw = redis.opsForHash().get(key, storeId);
         } catch (Exception e) {
             return null;
         }
-        if (hash == null || hash.isEmpty()) return null;
+        if (raw == null) return null;
         try {
-            Float price = hash.get("price") == null ? null : Float.parseFloat(hash.get("price").toString());
-            Boolean inStock = hash.get("in_stock") == null ? null : Boolean.parseBoolean(hash.get("in_stock").toString());
-            OffsetDateTime fetchedAt = hash.get("fetched_at") == null
-                ? null : parseTime(hash.get("fetched_at").toString());
-            return new PriceSnapshot(price, inStock, fetchedAt);
-        } catch (NumberFormatException | DateTimeParseException ex) {
+            JsonNode node = json.readTree(raw.toString());
+            Float price = node.hasNonNull("price") ? Float.parseFloat(node.get("price").asText()) : null;
+            Boolean inStock = node.hasNonNull("in_stock") ? node.get("in_stock").asBoolean() : null;
+            OffsetDateTime fetchedAt = node.hasNonNull("fetched_at") ? parseTime(node.get("fetched_at").asText()) : null;
+            long jitterSecs = node.hasNonNull("jitter_secs") ? node.get("jitter_secs").asLong() : 0L;
+            return new PriceSnapshot(price, inStock, fetchedAt, jitterSecs);
+        } catch (JsonProcessingException | NumberFormatException ex) {
             return null;
         }
     }
@@ -131,5 +139,5 @@ public class PricingService {
         }
     }
 
-    private record PriceSnapshot(Float price, Boolean inStock, OffsetDateTime fetchedAt) {}
+    private record PriceSnapshot(Float price, Boolean inStock, OffsetDateTime fetchedAt, long jitterSecs) {}
 }
