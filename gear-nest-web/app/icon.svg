@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32" role="img" aria-label="GearNest">
+  <rect width="32" height="32" rx="7" fill="#2f7a3a"/>
+  <!-- mountain range silhouette -->
+  <path d="M4 23 L12 9 L17 16.5 L21 12 L28 23 Z" fill="#ffffff"/>
+  <!-- snowcap notch on the main peak -->
+  <path d="M10.4 13 L12 9 L13.6 13 L12.6 12.2 L11.4 12.2 Z" fill="#2f7a3a"/>
+  <!-- nest: cradling baseline arc -->
+  <path d="M5 25 Q16 28.6 27 25" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round" opacity="0.85"/>
+</svg>
