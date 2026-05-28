@@ -20,7 +20,10 @@ import java.util.UUID;
 @Service
 public class PricingService {
 
-    static final Duration STALE_THRESHOLD = Duration.ofHours(25);
+    // Must match the pipeline's staleness rule (gear-nest-pipeline/src/prices/mod.rs):
+    // a snapshot is stale when now - fetched_at > 24h + jitter_secs. The per-key
+    // jitter is read from the payload so reader and writer agree exactly.
+    static final Duration STALE_BASE = Duration.ofHours(24);
     static final Duration NEXT_UPDATE_WINDOW = Duration.ofHours(24);
 
     private final PricingRepository repo;
@@ -58,7 +61,8 @@ public class PricingService {
                 price = snap.price();
                 inStock = snap.inStock();
                 fetchedAt = snap.fetchedAt();
-                stale = fetchedAt != null && fetchedAt.isBefore(OffsetDateTime.now(ZoneOffset.UTC).minus(STALE_THRESHOLD));
+                stale = fetchedAt != null && fetchedAt.isBefore(
+                    OffsetDateTime.now(ZoneOffset.UTC).minus(STALE_BASE).minusSeconds(snap.jitterSecs()));
             } else {
                 PricingRepository.HistoricalPrice h = fallback.get(s.id());
                 price = h == null ? null : h.price();
@@ -119,7 +123,8 @@ public class PricingService {
             Float price = node.hasNonNull("price") ? Float.parseFloat(node.get("price").asText()) : null;
             Boolean inStock = node.hasNonNull("in_stock") ? node.get("in_stock").asBoolean() : null;
             OffsetDateTime fetchedAt = node.hasNonNull("fetched_at") ? parseTime(node.get("fetched_at").asText()) : null;
-            return new PriceSnapshot(price, inStock, fetchedAt);
+            long jitterSecs = node.hasNonNull("jitter_secs") ? node.get("jitter_secs").asLong() : 0L;
+            return new PriceSnapshot(price, inStock, fetchedAt, jitterSecs);
         } catch (Exception ex) {
             return null;
         }
@@ -133,5 +138,5 @@ public class PricingService {
         }
     }
 
-    private record PriceSnapshot(Float price, Boolean inStock, OffsetDateTime fetchedAt) {}
+    private record PriceSnapshot(Float price, Boolean inStock, OffsetDateTime fetchedAt, long jitterSecs) {}
 }

@@ -46,9 +46,11 @@ the single source of truth.
 
 ### Reader (API)
 `gear-nest-api/.../pricing/PricingService.java` — `readSnapshot(productId, storeId)`.
-Staleness: a snapshot is considered stale when `now - fetched_at > 25h`
-(STALE_THRESHOLD). On a Redis miss the API falls back to the latest
-`price_history` row in Postgres and marks the listing stale.
+Staleness: a snapshot is stale when `now - fetched_at > 24h + jitter_secs` — the
+**same rule** the pipeline uses in `PricePayload::is_stale` (`prices/mod.rs`). The
+reader honors the payload's `jitter_secs` so both sides agree exactly. On a Redis
+miss the API falls back to the latest `price_history` row in Postgres and marks
+the listing stale.
 
 ### Contract test
 `gear-nest-api/.../pricing/PricingRedisContractTest.java` seeds a price in this

@@ -52,4 +52,30 @@ class PricingRedisContractTest extends AbstractIntegrationTest {
         assertThat(listing.inStock()).isTrue();
         assertThat(listing.isStale()).isFalse();
     }
+
+    // Reader must honor jitter_secs in the staleness rule (24h + jitter), matching
+    // the pipeline's PricePayload::is_stale. A price fetched 24h30m ago with a
+    // 60-min jitter is still fresh; with zero jitter it would be stale.
+    @Test
+    void honorsJitterInStalenessRule() {
+        UUID productId = UUID.randomUUID();
+        UUID listingId = UUID.randomUUID();
+
+        jdbc.update("INSERT INTO products (id, slug, name, brand, category) VALUES (?, ?, ?, ?, ?)",
+            productId, "stove-" + productId, "Test Stove", "MSR", "camp-kitchen");
+        jdbc.update("""
+            INSERT INTO store_listings
+              (id, product_id, store_id, store_product_id, store_url, store_rating, store_review_count, match_confidence)
+            VALUES (?, ?, 'rei', 'R0TEST', 'https://rei.com/x', 4.4, 50, 'EXACT')
+            """, listingId, productId);
+
+        String fetchedAt = OffsetDateTime.now(ZoneOffset.UTC).minusHours(24).minusMinutes(30).toString();
+        String payload = ("{\"listing_id\":\"" + listingId + "\",\"price\":\"59.00\","
+            + "\"in_stock\":true,\"fetched_at\":\"" + fetchedAt + "\",\"jitter_secs\":3600}");
+        redis.opsForHash().put("prices:" + productId, "rei", payload);
+
+        StoreListing listing = pricingService.comparisonFor(productId).listings().get(0);
+        assertThat(listing.price()).isEqualTo(59.00f);
+        assertThat(listing.isStale()).isFalse();
+    }
 }
