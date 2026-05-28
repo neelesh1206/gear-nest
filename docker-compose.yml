@@ -32,6 +32,9 @@ services:
   pipeline:
     build:
       context: ./gear-nest-pipeline
+    volumes:
+      # Migration runner walks up from /app to find supabase/migrations.
+      - ./supabase/migrations:/app/supabase/migrations:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -41,6 +44,11 @@ services:
       DATABASE_URL: postgresql://gearnest:gearnest_dev@postgres:5432/gearnest
       REDIS_URL: redis://redis:6379
       RUST_LOG: info
+    # Loads local secrets (HUGGINGFACE_API_KEY, PAAPI_*) into the container.
+    # Gitignored; optional so the stack still starts without it.
+    env_file:
+      - path: .env.local
+        required: false
     profiles: ["pipeline"]
 
   api:
@@ -58,6 +66,11 @@ services:
       SPRING_DATASOURCE_USERNAME: gearnest
       SPRING_DATASOURCE_PASSWORD: gearnest_dev
       REDIS_URL: redis://redis:6379
+    # Loads HUGGINGFACE_API_KEY (for chat + search-with-query) into the container.
+    # Gitignored; optional so the stack still starts without it.
+    env_file:
+      - path: .env.local
+        required: false
     profiles: ["api"]
 
   web:
