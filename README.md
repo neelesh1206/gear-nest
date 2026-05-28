@@ -41,6 +41,10 @@ Rust ingestion pipeline. Scrapes 8 stores, normalizes products, chunks reviews a
 ```bash
 cd gear-nest-pipeline
 cargo run -- --help
+cargo run -- migrate                              # apply migrations + partition DDL
+cargo run -- scrape-amazon B0XXXXXXXX B0YYYYYY    # PA-API → normalize → embed → DB
+cargo run -- ensure-partitions                    # idempotent monthly partitions
+cargo test  -- --ignored                          # end-to-end (needs Postgres + Redis)
 ```
 
 See [`gear-nest-pipeline/CLAUDE.md`](./gear-nest-pipeline/CLAUDE.md).
