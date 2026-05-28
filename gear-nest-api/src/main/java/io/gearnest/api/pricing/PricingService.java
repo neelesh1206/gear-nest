@@ -1,5 +1,7 @@
 package io.gearnest.api.pricing;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.gearnest.api.product.dto.PriceComparisonResponse;
 import io.gearnest.api.product.dto.StoreListing;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -24,11 +26,13 @@ public class PricingService {
     private final PricingRepository repo;
     private final StringRedisTemplate redis;
     private final BestValueScorer scorer;
+    private final ObjectMapper json;
 
-    public PricingService(PricingRepository repo, StringRedisTemplate redis, BestValueScorer scorer) {
+    public PricingService(PricingRepository repo, StringRedisTemplate redis, BestValueScorer scorer, ObjectMapper json) {
         this.repo = repo;
         this.redis = redis;
         this.scorer = scorer;
+        this.json = json;
     }
 
     public PriceComparisonResponse comparisonFor(UUID productId) {
@@ -44,7 +48,7 @@ public class PricingService {
         OffsetDateTime latestFetch = null;
 
         for (StaticListing s : statics) {
-            PriceSnapshot snap = readSnapshot(s.id());
+            PriceSnapshot snap = readSnapshot(productId, s.store().id());
             Float price;
             Boolean inStock;
             OffsetDateTime fetchedAt;
@@ -81,18 +85,12 @@ public class PricingService {
     public Map<UUID, Float> lowestPrices(List<UUID> productIds) {
         if (productIds.isEmpty()) return Map.of();
         Map<UUID, Float> live = new HashMap<>();
-        List<UUID> listingProductMap = new ArrayList<>();
-        Map<UUID, UUID> listingToProduct = new HashMap<>();
         for (UUID pid : productIds) {
             for (StaticListing s : repo.listingsForProduct(pid)) {
-                listingToProduct.put(s.id(), pid);
-                listingProductMap.add(s.id());
+                PriceSnapshot snap = readSnapshot(pid, s.store().id());
+                if (snap == null || snap.price() == null) continue;
+                live.merge(pid, snap.price(), Math::min);
             }
-        }
-        for (Map.Entry<UUID, UUID> e : listingToProduct.entrySet()) {
-            PriceSnapshot snap = readSnapshot(e.getKey());
-            if (snap == null || snap.price() == null) continue;
-            live.merge(e.getValue(), snap.price(), Math::min);
         }
         Map<UUID, Float> fallback = repo.lowestPricesForProducts(productIds);
         for (UUID pid : productIds) {
@@ -103,22 +101,26 @@ public class PricingService {
         return live;
     }
 
-    private PriceSnapshot readSnapshot(UUID listingId) {
-        String key = "price:listing:" + listingId;
-        Map<Object, Object> hash;
+    // Reads the price the pipeline writes (see docs/contracts/redis-schema.md):
+    //   key   = prices:{product_id}
+    //   field = {store_id}
+    //   value = JSON {listing_id, price, in_stock, fetched_at, jitter_secs}
+    private PriceSnapshot readSnapshot(UUID productId, String storeId) {
+        String key = "prices:" + productId;
+        Object raw;
         try {
-            hash = redis.opsForHash().entries(key);
+            raw = redis.opsForHash().get(key, storeId);
         } catch (Exception e) {
             return null;
         }
-        if (hash == null || hash.isEmpty()) return null;
+        if (raw == null) return null;
         try {
-            Float price = hash.get("price") == null ? null : Float.parseFloat(hash.get("price").toString());
-            Boolean inStock = hash.get("in_stock") == null ? null : Boolean.parseBoolean(hash.get("in_stock").toString());
-            OffsetDateTime fetchedAt = hash.get("fetched_at") == null
-                ? null : parseTime(hash.get("fetched_at").toString());
+            JsonNode node = json.readTree(raw.toString());
+            Float price = node.hasNonNull("price") ? Float.parseFloat(node.get("price").asText()) : null;
+            Boolean inStock = node.hasNonNull("in_stock") ? node.get("in_stock").asBoolean() : null;
+            OffsetDateTime fetchedAt = node.hasNonNull("fetched_at") ? parseTime(node.get("fetched_at").asText()) : null;
             return new PriceSnapshot(price, inStock, fetchedAt);
-        } catch (NumberFormatException | DateTimeParseException ex) {
+        } catch (Exception ex) {
             return null;
         }
     }

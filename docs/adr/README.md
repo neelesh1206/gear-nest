@@ -32,7 +32,7 @@ Sessions claim a reserved number and fill in content. They do **not** renumber.
 - [0013 — *reserved (Pipeline)*](./0013-reserved-pipeline.md)
 - [0014 — *reserved (Pipeline)*](./0014-reserved-pipeline.md)
 - [0015 — *reserved (Pipeline)*](./0015-reserved-pipeline.md)
-- [0016 — *reserved (API)*](./0016-reserved-api.md)
+- [0016 — Redis price schema is a pinned cross-service contract](./0016-reserved-api.md)
 - [0017 — *reserved (API)*](./0017-reserved-api.md)
 - [0018 — *reserved (API)*](./0018-reserved-api.md)
 - [0019 — *reserved (Web)*](./0019-reserved-web.md)
