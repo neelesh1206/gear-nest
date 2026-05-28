@@ -14,7 +14,7 @@ jobs:
   review:
     name: Claude review (scope + contract + ADR conformance)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - name: Checkout PR
         uses: actions/checkout@v4
@@ -31,11 +31,23 @@ jobs:
           use_sticky_comment: "true"
           track_progress: "false"
           prompt: |
-            Review this GearNest PR. Post your final verdict as a single PR
-            comment using the sticky-comment mechanism — do not split into
-            multiple inline comments.
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            PR BRANCH: ${{ github.event.pull_request.head.ref }}
 
-            CONTEXT FILES (read only if needed for a specific check):
+            You are reviewing a PR against the GearNest monorepo. The PR branch
+            is already checked out in the current working directory.
+
+            HOW TO POST YOUR REVIEW (CRITICAL — read first):
+            - Use `gh pr comment ${{ github.event.pull_request.number }} --body "..."`
+              to post your verdict as a single top-level PR comment.
+            - Only post via `gh pr comment`. Do NOT submit your review as your
+              final agent message — the action will not publish it. If you don't
+              call `gh pr comment`, nothing gets posted.
+            - Post exactly ONE comment per run. If a prior sticky comment exists
+              the action will update it.
+
+            CONTEXT FILES (read only what you need):
             - root CLAUDE.md — scope rules
             - SPEC.md §6 (schema), §10 (API), §11 (RAG), §18 (ADRs), §19 (parallel)
             - docs/adr/0001 through 0012 — architectural invariants
@@ -46,6 +58,7 @@ jobs:
               feat/api-*      → only gear-nest-api/      + CHANGELOG + README + adr/0016-0018
               feat/web-*      → only gear-nest-web/      + CHANGELOG + README + adr/0019-0020
               feat/contract-* → docs/, supabase/migrations/, root config, .github/, per-service CLAUDE.md
+            Run `git diff origin/main...HEAD --stat` first to see the diff at a glance.
             Any cross-track edit = BLOCKING.
 
             CHECK 2 — CONTRACT (BLOCKING)
@@ -67,7 +80,7 @@ jobs:
             CHECK 5 — CHANGELOG (non-blocking)
             Appended one line: `YYYY-MM-DD · <service> · <feature> — summary`. Not rewritten.
 
-            OUTPUT — Post EXACTLY this format as the sticky comment:
+            COMMENT BODY — exactly this Markdown format:
 
             **Verdict:** APPROVE | REQUEST CHANGES | COMMENT
 
@@ -81,11 +94,14 @@ jobs:
 
             **Details:** (only if any ❌) — bulleted, max 5 bullets, each cites file:line.
 
-            Verdict = REQUEST CHANGES if any of Scope/Contract/ADR is ❌.
-            Verdict = APPROVE if all of Scope/Contract/ADR are ✅ and no severe code issues.
-            Verdict = COMMENT otherwise (minor nits).
+            Verdict rules:
+            - REQUEST CHANGES if any of Scope/Contract/ADR is ❌.
+            - APPROVE if all of Scope/Contract/ADR are ✅ and no severe code issues.
+            - COMMENT otherwise (minor nits).
 
             Be terse. Cite SPEC sections or ADR numbers, don't paraphrase them.
+
+            Final step: call `gh pr comment ${{ github.event.pull_request.number }} --body "<your markdown above>"`.
           claude_args: |
             --model claude-opus-4-7
-            --max-turns 8
+            --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr files:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*),Read,Glob,Grep"
