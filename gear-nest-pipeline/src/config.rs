@@ -8,7 +8,7 @@ pub struct Config {
     pub redis_url: String,
     pub huggingface_token: Option<String>,
     pub huggingface_model: String,
-    /// Override for the HuggingFace Inference API base URL. Used by tests to
+    /// Override for the `HuggingFace` Inference API base URL. Used by tests to
     /// point at a wiremock instance; production code leaves this `None`.
     pub huggingface_base_url: Option<String>,
     pub paapi: PaapiConfig,

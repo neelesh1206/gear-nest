@@ -43,9 +43,10 @@ fn redact(url: &str) -> String {
 /// `CARGO_MANIFEST_DIR`. We don't bake the path in because the migrations live
 /// in the monorepo root, not inside this crate.
 pub fn locate_migrations_dir() -> Result<PathBuf> {
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").map_or_else(
+        |_| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")),
+        PathBuf::from,
+    );
 
     let mut cursor: Option<&Path> = Some(&manifest_dir);
     while let Some(dir) = cursor {

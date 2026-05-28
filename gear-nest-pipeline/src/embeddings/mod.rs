@@ -1,9 +1,10 @@
-//! HuggingFace Inference API embedding client + pgvector bulk insert.
+//! `HuggingFace` Inference API embedding client + pgvector bulk insert.
 //!
 //! Phase 1 wires the data path; HNSW is intentionally absent (ADR-001), the
 //! chunk tables have a plain btree on `product_id` and chat does exact KNN
 //! over the ~75 rows per product.
 
+use std::fmt::Write as _;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -58,7 +59,7 @@ impl HuggingFaceEmbedder {
         })
     }
 
-    /// Embed an arbitrary number of inputs by batching into BATCH_SIZE chunks.
+    /// Embed an arbitrary number of inputs by batching into `BATCH_SIZE` chunks.
     /// Returns vectors in the same order as the inputs.
     pub async fn embed(&self, inputs: &[String]) -> Result<Vec<Vec<f32>>> {
         if inputs.is_empty() {
@@ -270,7 +271,7 @@ fn vector_literal(v: &[f32]) -> String {
             s.push(',');
         }
         // Pgvector accepts any float repr; default precision is fine.
-        s.push_str(&format!("{x}"));
+        let _ = write!(s, "{x}");
     }
     s.push(']');
     s
@@ -293,7 +294,7 @@ pub async fn embed_and_insert_product_specs(
             rows.push(SpecChunkInsert {
                 product_id,
                 chunk_text: chunk_text.clone(),
-                chunk_index: idx as i16,
+                chunk_index: i16::try_from(idx).unwrap_or(i16::MAX),
                 source_type: SpecSource::Description,
             });
             texts.push(chunk_text);
@@ -303,7 +304,7 @@ pub async fn embed_and_insert_product_specs(
         rows.push(SpecChunkInsert {
             product_id,
             chunk_text: feat.clone(),
-            chunk_index: (rows.len() + idx) as i16,
+            chunk_index: i16::try_from(rows.len() + idx).unwrap_or(i16::MAX),
             source_type: SpecSource::Features,
         });
         texts.push(feat.clone());

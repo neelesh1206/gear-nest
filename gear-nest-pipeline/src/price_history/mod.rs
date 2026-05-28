@@ -35,8 +35,7 @@ pub async fn ensure_partitions(pool: &PgPool, anchor: DateTime<Utc>) -> Result<(
         let sql = format!(
             "CREATE TABLE IF NOT EXISTS {name} \
              PARTITION OF price_history \
-             FOR VALUES FROM ('{}') TO ('{}')",
-            start, end
+             FOR VALUES FROM ('{start}') TO ('{end}')"
         );
         debug!(partition = %name, "ensure_partitions DDL");
         sqlx::query(&sql)
@@ -127,6 +126,9 @@ fn previous_month_start(d: NaiveDate) -> NaiveDate {
     add_months(month_start(d), -1)
 }
 
+// `month()` is always 1..=12 and the loops keep `month` in 1..=12, so the
+// u32<->i32 casts can neither wrap nor lose sign.
+#[allow(clippy::cast_possible_wrap, clippy::cast_sign_loss)]
 fn add_months(d: NaiveDate, months: i32) -> NaiveDate {
     let mut year = d.year();
     let mut month = d.month() as i32 + months;

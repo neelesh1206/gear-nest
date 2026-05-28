@@ -1,4 +1,4 @@
-//! GearNest ingestion pipeline.
+//! `GearNest` ingestion pipeline.
 //!
 //! Library entry point. Modules:
 //!
@@ -7,7 +7,7 @@
 //! * [`scrapers`]          — per-store crawlers behind a common trait.
 //! * [`normalizer`]        — title / category / brand canonicalization.
 //! * [`entity_resolution`] — three-tier product matching (ADR-007).
-//! * [`embeddings`]        — HuggingFace batched embed → pgvector bulk insert.
+//! * [`embeddings`]        — `HuggingFace` batched embed → pgvector bulk insert.
 //! * [`prices`]            — stale-while-revalidate Redis writer (ADR-009).
 //! * [`price_history`]     — partition-aware append + idempotent DDL (ADR-010).
 

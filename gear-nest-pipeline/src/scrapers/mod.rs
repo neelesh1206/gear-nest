@@ -33,11 +33,11 @@ pub trait StoreCrawler: Send + Sync {
 pub async fn record_raw(pool: &PgPool, raw: &RawProduct) -> Result<Uuid> {
     ensure_scrape_audit(pool).await?;
     let id: Uuid = sqlx::query_scalar(
-        r#"
+        r"
         INSERT INTO _gn_scrape_audit (store_id, store_product_id, payload)
         VALUES ($1, $2, $3)
         RETURNING id
-        "#,
+        ",
     )
     .bind(&raw.store_id)
     .bind(&raw.store_product_id)
@@ -58,7 +58,7 @@ pub async fn record_raw(pool: &PgPool, raw: &RawProduct) -> Result<Uuid> {
 /// `supabase/migrations/`.
 pub async fn ensure_scrape_audit(pool: &PgPool) -> Result<()> {
     sqlx::query(
-        r#"
+        r"
         CREATE TABLE IF NOT EXISTS _gn_scrape_audit (
             id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             store_id            TEXT NOT NULL,
@@ -66,7 +66,7 @@ pub async fn ensure_scrape_audit(pool: &PgPool) -> Result<()> {
             payload             JSONB NOT NULL,
             scraped_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
-        "#,
+        ",
     )
     .execute(pool)
     .await?;

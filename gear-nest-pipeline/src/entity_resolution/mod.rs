@@ -153,7 +153,7 @@ async fn lookup_by_store_listing(
 
 async fn create_product(pool: &PgPool, norm: &NormalizedProduct) -> Result<Uuid> {
     let row: (Uuid,) = sqlx::query_as(
-        r#"
+        r"
         INSERT INTO products
             (slug, name, brand, category, subcategory, description, specs,
              primary_image, gtin, canonical_key)
@@ -168,7 +168,7 @@ async fn create_product(pool: &PgPool, norm: &NormalizedProduct) -> Result<Uuid>
                 primary_image  = COALESCE(EXCLUDED.primary_image, products.primary_image),
                 updated_at     = NOW()
         RETURNING id
-        "#,
+        ",
     )
     .bind(&norm.slug)
     .bind(&norm.name)
@@ -192,7 +192,7 @@ async fn upsert_store_listing(
     confidence: MatchConfidence,
 ) -> Result<()> {
     sqlx::query(
-        r#"
+        r"
         INSERT INTO store_listings
             (product_id, store_id, store_product_id, store_url,
              store_rating, store_review_count, match_confidence, last_synced_at)
@@ -204,7 +204,7 @@ async fn upsert_store_listing(
                 store_review_count = EXCLUDED.store_review_count,
                 match_confidence   = EXCLUDED.match_confidence,
                 last_synced_at     = NOW()
-        "#,
+        ",
     )
     .bind(product_id)
     .bind(&raw.store_id)

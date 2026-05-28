@@ -14,7 +14,7 @@ pub mod text;
 
 pub fn normalize(raw: &RawProduct) -> NormalizedProduct {
     let canonical_brand = brand::canonicalize(raw.brand.as_deref().unwrap_or(""));
-    let canonical_brand = if canonical_brand.is_empty() {
+    let canonical_brand = if canonical_brand.is_none() {
         brand::infer_from_title(&raw.title)
     } else {
         canonical_brand

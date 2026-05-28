@@ -1,6 +1,6 @@
 # Multi-stage build for the Rust ingestion pipeline.
 # rustls everywhere (sqlx + reqwest), so no OpenSSL/libssl needed at build time.
-FROM rust:1.83-slim AS build
+FROM rust:1.95-slim AS build
 WORKDIR /build
 COPY . .
 RUN cargo build --release

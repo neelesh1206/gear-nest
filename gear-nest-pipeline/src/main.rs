@@ -89,19 +89,19 @@ async fn main() -> Result<()> {
             for raw in &raws {
                 let _audit_id = record_raw(&pool, raw).await?;
                 let norm = normalizer::normalize(raw);
-                let resolved = resolver.resolve(raw, &norm).await?;
+                let resolution = resolver.resolve(raw, &norm).await?;
                 info!(
                     asin = raw.store_product_id.as_str(),
-                    product_id = %resolved.product_id,
-                    confidence = resolved.confidence.as_db_str(),
-                    created = resolved.created,
+                    product_id = %resolution.product_id,
+                    confidence = resolution.confidence.as_db_str(),
+                    created = resolution.created,
                     "resolved"
                 );
 
                 if let Err(e) = gear_nest_pipeline::embeddings::embed_and_insert_product_specs(
                     &embedder,
                     &pool,
-                    resolved.product_id,
+                    resolution.product_id,
                     norm.description.as_deref(),
                     norm.specs
                         .get("features")
@@ -131,7 +131,7 @@ async fn main() -> Result<()> {
                         jitter_secs: 0,
                     };
                     price_writer
-                        .write(resolved.product_id, &raw.store_id, payload)
+                        .write(resolution.product_id, &raw.store_id, payload)
                         .await?;
                     price_history::append(
                         &pool,

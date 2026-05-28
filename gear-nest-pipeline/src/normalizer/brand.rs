@@ -6,8 +6,6 @@
 
 use std::collections::HashMap;
 
-use once_cell::sync::Lazy;
-
 /// Canonical brand slug for a raw brand string. Returns `Some("msr")` for
 /// any of "Mountain Safety Research", "M.S.R.", "MSR", etc. Empty input
 /// returns an empty string so callers can fall back to title inference.
@@ -20,7 +18,7 @@ pub fn canonicalize(raw: &str) -> Option<String> {
         .get(key.as_str())
         .copied()
         .map(str::to_string)
-        .or_else(|| Some(key))
+        .or(Some(key))
 }
 
 /// Heuristic: scan a product title for any aliased brand variant.
@@ -32,7 +30,7 @@ pub fn infer_from_title(title: &str) -> Option<String> {
     for (alias, canon) in ALIASES.iter() {
         if lower.contains(alias) {
             let len = alias.len();
-            if best.map_or(true, |(_, l)| len > l) {
+            if best.is_none_or(|(_, l)| len > l) {
                 best = Some((canon, len));
             }
         }
@@ -44,8 +42,7 @@ fn normalize_lookup(s: &str) -> String {
     s.trim()
         .to_lowercase()
         .replace('.', "")
-        .replace('-', " ")
-        .replace('_', " ")
+        .replace(['-', '_'], " ")
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ")
@@ -53,121 +50,122 @@ fn normalize_lookup(s: &str) -> String {
 
 /// Curated ~outdoor + fitness brand aliases. Coverage is intentionally narrow:
 /// the long tail goes through Tier-3 embedding similarity (ADR-007 §trade-off).
-static ALIASES: Lazy<HashMap<&'static str, &'static str>> = Lazy::new(|| {
-    let pairs: &[(&str, &str)] = &[
-        // MSR / Mountain Safety Research
-        ("msr", "msr"),
-        ("mountain safety research", "msr"),
-        // Patagonia
-        ("patagonia", "patagonia"),
-        // Arc'teryx — note the curly apostrophe variants
-        ("arcteryx", "arcteryx"),
-        ("arc teryx", "arcteryx"),
-        ("arc'teryx", "arcteryx"),
-        // The North Face
-        ("the north face", "the-north-face"),
-        ("north face", "the-north-face"),
-        ("tnf", "the-north-face"),
-        // Black Diamond
-        ("black diamond", "black-diamond"),
-        ("bd", "black-diamond"),
-        // Big Agnes
-        ("big agnes", "big-agnes"),
-        // Nemo Equipment
-        ("nemo", "nemo"),
-        ("nemo equipment", "nemo"),
-        // Therm-a-Rest
-        ("thermarest", "therm-a-rest"),
-        ("therm a rest", "therm-a-rest"),
-        // REI Co-op
-        ("rei", "rei-co-op"),
-        ("rei co op", "rei-co-op"),
-        ("rei coop", "rei-co-op"),
-        // Salomon
-        ("salomon", "salomon"),
-        // Hoka / Hoka One One
-        ("hoka", "hoka"),
-        ("hoka one one", "hoka"),
-        // On / On Running
-        ("on", "on-running"),
-        ("on running", "on-running"),
-        // Garmin
-        ("garmin", "garmin"),
-        // Suunto
-        ("suunto", "suunto"),
-        // Coros
-        ("coros", "coros"),
-        // Yeti
-        ("yeti", "yeti"),
-        ("yeti coolers", "yeti"),
-        // Hydro Flask
-        ("hydro flask", "hydro-flask"),
-        ("hydroflask", "hydro-flask"),
-        // Osprey
-        ("osprey", "osprey"),
-        ("osprey packs", "osprey"),
-        // Deuter
-        ("deuter", "deuter"),
-        // Gregory
-        ("gregory", "gregory"),
-        ("gregory mountain products", "gregory"),
-        // La Sportiva
-        ("la sportiva", "la-sportiva"),
-        // Scarpa
-        ("scarpa", "scarpa"),
-        // Merrell
-        ("merrell", "merrell"),
-        // Smartwool
-        ("smartwool", "smartwool"),
-        // Darn Tough
-        ("darn tough", "darn-tough"),
-        ("darn tough vermont", "darn-tough"),
-        // Outdoor Research
-        ("outdoor research", "outdoor-research"),
-        ("or", "outdoor-research"),
-        // Mountain Hardwear
-        ("mountain hardwear", "mountain-hardwear"),
-        // Marmot
-        ("marmot", "marmot"),
-        // Kelty
-        ("kelty", "kelty"),
-        // CamelBak
-        ("camelbak", "camelbak"),
-        // GoalZero
-        ("goal zero", "goal-zero"),
-        ("goalzero", "goal-zero"),
-        // BioLite
-        ("biolite", "biolite"),
-        // Jetboil
-        ("jetboil", "jetboil"),
-        // Petzl
-        ("petzl", "petzl"),
-        // Fjallraven
-        ("fjallraven", "fjallraven"),
-        ("fjall raven", "fjallraven"),
-        // Mammut
-        ("mammut", "mammut"),
-        // Sea to Summit
-        ("sea to summit", "sea-to-summit"),
-        // Klean Kanteen
-        ("klean kanteen", "klean-kanteen"),
-        // Rab
-        ("rab", "rab"),
-        // Helly Hansen
-        ("helly hansen", "helly-hansen"),
-        // Salewa
-        ("salewa", "salewa"),
-        // Rogue Fitness
-        ("rogue", "rogue-fitness"),
-        ("rogue fitness", "rogue-fitness"),
-        // Concept2
-        ("concept2", "concept2"),
-        ("concept 2", "concept2"),
-        // Garage Grown Gear in-house brands captured in raw form go through the
-        // long tail; they are intentionally absent.
-    ];
-    pairs.iter().copied().collect()
-});
+static ALIASES: std::sync::LazyLock<HashMap<&'static str, &'static str>> =
+    std::sync::LazyLock::new(|| {
+        let pairs: &[(&str, &str)] = &[
+            // MSR / Mountain Safety Research
+            ("msr", "msr"),
+            ("mountain safety research", "msr"),
+            // Patagonia
+            ("patagonia", "patagonia"),
+            // Arc'teryx — note the curly apostrophe variants
+            ("arcteryx", "arcteryx"),
+            ("arc teryx", "arcteryx"),
+            ("arc'teryx", "arcteryx"),
+            // The North Face
+            ("the north face", "the-north-face"),
+            ("north face", "the-north-face"),
+            ("tnf", "the-north-face"),
+            // Black Diamond
+            ("black diamond", "black-diamond"),
+            ("bd", "black-diamond"),
+            // Big Agnes
+            ("big agnes", "big-agnes"),
+            // Nemo Equipment
+            ("nemo", "nemo"),
+            ("nemo equipment", "nemo"),
+            // Therm-a-Rest
+            ("thermarest", "therm-a-rest"),
+            ("therm a rest", "therm-a-rest"),
+            // REI Co-op
+            ("rei", "rei-co-op"),
+            ("rei co op", "rei-co-op"),
+            ("rei coop", "rei-co-op"),
+            // Salomon
+            ("salomon", "salomon"),
+            // Hoka / Hoka One One
+            ("hoka", "hoka"),
+            ("hoka one one", "hoka"),
+            // On / On Running
+            ("on", "on-running"),
+            ("on running", "on-running"),
+            // Garmin
+            ("garmin", "garmin"),
+            // Suunto
+            ("suunto", "suunto"),
+            // Coros
+            ("coros", "coros"),
+            // Yeti
+            ("yeti", "yeti"),
+            ("yeti coolers", "yeti"),
+            // Hydro Flask
+            ("hydro flask", "hydro-flask"),
+            ("hydroflask", "hydro-flask"),
+            // Osprey
+            ("osprey", "osprey"),
+            ("osprey packs", "osprey"),
+            // Deuter
+            ("deuter", "deuter"),
+            // Gregory
+            ("gregory", "gregory"),
+            ("gregory mountain products", "gregory"),
+            // La Sportiva
+            ("la sportiva", "la-sportiva"),
+            // Scarpa
+            ("scarpa", "scarpa"),
+            // Merrell
+            ("merrell", "merrell"),
+            // Smartwool
+            ("smartwool", "smartwool"),
+            // Darn Tough
+            ("darn tough", "darn-tough"),
+            ("darn tough vermont", "darn-tough"),
+            // Outdoor Research
+            ("outdoor research", "outdoor-research"),
+            ("or", "outdoor-research"),
+            // Mountain Hardwear
+            ("mountain hardwear", "mountain-hardwear"),
+            // Marmot
+            ("marmot", "marmot"),
+            // Kelty
+            ("kelty", "kelty"),
+            // CamelBak
+            ("camelbak", "camelbak"),
+            // GoalZero
+            ("goal zero", "goal-zero"),
+            ("goalzero", "goal-zero"),
+            // BioLite
+            ("biolite", "biolite"),
+            // Jetboil
+            ("jetboil", "jetboil"),
+            // Petzl
+            ("petzl", "petzl"),
+            // Fjallraven
+            ("fjallraven", "fjallraven"),
+            ("fjall raven", "fjallraven"),
+            // Mammut
+            ("mammut", "mammut"),
+            // Sea to Summit
+            ("sea to summit", "sea-to-summit"),
+            // Klean Kanteen
+            ("klean kanteen", "klean-kanteen"),
+            // Rab
+            ("rab", "rab"),
+            // Helly Hansen
+            ("helly hansen", "helly-hansen"),
+            // Salewa
+            ("salewa", "salewa"),
+            // Rogue Fitness
+            ("rogue", "rogue-fitness"),
+            ("rogue fitness", "rogue-fitness"),
+            // Concept2
+            ("concept2", "concept2"),
+            ("concept 2", "concept2"),
+            // Garage Grown Gear in-house brands captured in raw form go through the
+            // long tail; they are intentionally absent.
+        ];
+        pairs.iter().copied().collect()
+    });
 
 #[cfg(test)]
 mod tests {

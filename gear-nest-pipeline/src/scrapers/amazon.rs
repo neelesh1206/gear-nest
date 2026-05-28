@@ -4,7 +4,7 @@
 //! and calls the `GetItems` operation against the configured PA-API host.
 //! See <https://webservices.amazon.com/paapi5/documentation/>.
 //!
-//! The PA-API GetItems request accepts up to **10 ItemIds** per call. Above
+//! The PA-API `GetItems` request accepts up to **10 `ItemIds`** per call. Above
 //! that the API returns `RequestThrottled`. We chunk callers' batches into
 //! groups of 10 and merge results.
 
@@ -162,14 +162,14 @@ impl StoreCrawler for AmazonScraper {
                 continue;
             };
             for item in payload.items {
-                out.push(item_to_raw(item));
+                out.push(item_to_raw(&item));
             }
         }
         Ok(out)
     }
 }
 
-fn item_to_raw(item: PaapiItem) -> RawProduct {
+fn item_to_raw(item: &PaapiItem) -> RawProduct {
     let title = item
         .item_info
         .as_ref()
@@ -236,7 +236,7 @@ fn item_to_raw(item: PaapiItem) -> RawProduct {
         .and_then(|c| c.count)
         .unwrap_or(0);
 
-    let raw_payload = serde_json::to_value(&item).unwrap_or(serde_json::Value::Null);
+    let raw_payload = serde_json::to_value(item).unwrap_or(serde_json::Value::Null);
 
     RawProduct {
         store_id: STORE_ID.into(),
@@ -247,7 +247,7 @@ fn item_to_raw(item: PaapiItem) -> RawProduct {
         category_path,
         description,
         features,
-        specs: serde_json::Value::Object(Default::default()),
+        specs: serde_json::Value::Object(serde_json::Map::new()),
         primary_image,
         gtin,
         price: price_amount,
@@ -527,7 +527,7 @@ mod tests {
             offers: None,
             customer_reviews: None,
         };
-        let raw = item_to_raw(item);
+        let raw = item_to_raw(&item);
         assert_eq!(raw.store_id, "amazon");
         assert_eq!(raw.store_product_id, "B0EXAMPLE");
         assert_eq!(raw.title, "MSR PocketRocket 2 Stove");

@@ -1,20 +1,29 @@
 //! End-to-end: scrape 50 Amazon products → normalize → resolve → embed → DB.
 //!
 //! Marked `#[ignore]` because it needs a running Postgres + Redis. CI invokes
-//! it explicitly with `cargo test -- --ignored`. The PA-API and HuggingFace
+//! it explicitly with `cargo test -- --ignored`. The PA-API and `HuggingFace`
 //! endpoints are stubbed with `wiremock`, so the test does not need real
 //! Amazon/HF credentials.
 //!
 //! Required env (compose-up defaults work):
-//!     DATABASE_URL=postgresql://gearnest:gearnest_dev@localhost:5432/gearnest
-//!     REDIS_URL=redis://localhost:6379
+//!     `DATABASE_URL=postgresql://gearnest:gearnest_dev@localhost:5432/gearnest`
+//!     `REDIS_URL=redis://localhost:6379`
+
+// Test code: count/index casts in assertions and a long end-to-end test body
+// are fine here. Production code keeps clippy::pedantic strict.
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::similar_names,
+    clippy::too_many_lines
+)]
 
 use std::env;
 
 use chrono::Utc;
 use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
-use uuid::Uuid;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
@@ -98,8 +107,7 @@ async fn scrape_50_amazon_products_end_to_end() {
             let n = body
                 .get("inputs")
                 .and_then(|v| v.as_array())
-                .map(|a| a.len())
-                .unwrap_or(1);
+                .map_or(1, std::vec::Vec::len);
             let vectors: Vec<Vec<f32>> = (0..n).map(|_| vec![0.0_f32; 384]).collect();
             ResponseTemplate::new(200).set_body_json(vectors)
         })
