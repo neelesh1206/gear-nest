@@ -31,7 +31,9 @@ pub struct HuggingFaceEmbedder {
     base_url: String,
 }
 
-const DEFAULT_HF_BASE_URL: &str = "https://api-inference.huggingface.co";
+// HF retired api-inference.huggingface.co; embeddings route through the
+// Inference Providers router (hf-inference provider).
+const DEFAULT_HF_BASE_URL: &str = "https://router.huggingface.co";
 
 impl HuggingFaceEmbedder {
     pub fn new(token: Option<String>, model: String) -> Result<Self> {
@@ -72,11 +74,11 @@ impl HuggingFaceEmbedder {
 
     async fn embed_chunk(&self, inputs: &[String]) -> Result<Vec<Vec<f32>>> {
         let url = format!(
-            "{}/pipeline/feature-extraction/{}",
+            "{}/hf-inference/models/{}/pipeline/feature-extraction",
             self.base_url.trim_end_matches('/'),
             self.model
         );
-        let body = json!({ "inputs": inputs, "options": { "wait_for_model": true } });
+        let body = json!({ "inputs": inputs });
 
         let mut req = self.client.post(&url).json(&body);
         if let Some(t) = self.token.as_deref() {

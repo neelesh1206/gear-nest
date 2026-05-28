@@ -31,7 +31,7 @@ impl Config {
             database_url: env::var("DATABASE_URL")
                 .context("DATABASE_URL must be set (see .env.example)")?,
             redis_url: env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".into()),
-            huggingface_token: env::var("HUGGINGFACE_TOKEN").ok(),
+            huggingface_token: env::var("HUGGINGFACE_API_KEY").ok(),
             huggingface_model: env::var("HUGGINGFACE_EMBEDDING_MODEL")
                 .unwrap_or_else(|_| "BAAI/bge-small-en-v1.5".into()),
             huggingface_base_url: env::var("HUGGINGFACE_BASE_URL").ok(),
