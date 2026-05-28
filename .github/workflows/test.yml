@@ -1,0 +1,123 @@
+name: Test
+
+on:
+  pull_request:
+    branches: [main]
+
+# Cancel superseded runs when a PR is pushed again — saves CI minutes + review quota.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  # Detect which service(s) a PR touches so we only run the relevant suites.
+  # Schema / OpenAPI changes fan out to the services that depend on them.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      pipeline: ${{ steps.filter.outputs.pipeline }}
+      api: ${{ steps.filter.outputs.api }}
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            pipeline:
+              - 'gear-nest-pipeline/**'
+              - 'supabase/migrations/**'
+            api:
+              - 'gear-nest-api/**'
+              - 'supabase/migrations/**'
+              - 'docs/api/openapi.yaml'
+            web:
+              - 'gear-nest-web/**'
+              - 'docs/api/openapi.yaml'
+
+  pipeline:
+    needs: changes
+    if: ${{ needs.changes.outputs.pipeline == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gear-nest-pipeline
+    env:
+      DATABASE_URL: postgresql://gearnest:gearnest_dev@localhost:5432/gearnest
+      REDIS_URL: redis://localhost:6379
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: gearnest
+          POSTGRES_USER: gearnest
+          POSTGRES_PASSWORD: gearnest_dev
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U gearnest -d gearnest"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain (pinned by rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: gear-nest-pipeline
+      - name: Format
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Unit tests
+        run: cargo test
+      - name: Apply schema (pipeline migration runner)
+        run: cargo run -- migrate
+      - name: Integration test (Postgres + Redis, wiremock-stubbed APIs)
+        run: cargo test -- --ignored
+
+  api:
+    needs: changes
+    if: ${{ needs.changes.outputs.api == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gear-nest-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: maven
+      # Tests use Testcontainers (pgvector + redis), which talks to the
+      # Docker daemon preinstalled on the GitHub-hosted runner.
+      - name: Test
+        run: ./mvnw -B test
+
+  web:
+    needs: changes
+    if: ${{ needs.changes.outputs.web == 'true' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gear-nest-web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: gear-nest-web/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
