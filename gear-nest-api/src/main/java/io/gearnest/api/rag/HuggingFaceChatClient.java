@@ -8,6 +8,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Flux;
 
+import java.util.List;
 import java.util.Map;
 
 @Component
@@ -28,29 +29,31 @@ public class HuggingFaceChatClient implements ChatClient {
         if (props.apiKey() == null || props.apiKey().isBlank()) {
             return Flux.error(new IllegalStateException("HuggingFace API key not configured"));
         }
+        // HF router is OpenAI-compatible: POST /v1/chat/completions with
+        // {model, messages, stream:true} → SSE chunks of {choices:[{delta:{content}}]}.
         return webClient.post()
-            .uri("/models/{model}", props.chatModel())
+            .uri("/v1/chat/completions")
             .contentType(MediaType.APPLICATION_JSON)
             .accept(MediaType.TEXT_EVENT_STREAM)
             .bodyValue(Map.of(
-                "inputs", prompt,
-                "parameters", Map.of("max_new_tokens", 512, "temperature", 0.3, "return_full_text", false),
-                "stream", true,
-                "options", Map.of("wait_for_model", true)
+                "model", props.chatModel(),
+                "messages", List.of(Map.of("role", "user", "content", prompt)),
+                "max_tokens", 512,
+                "temperature", 0.3,
+                "stream", true
             ))
             .retrieve()
             .bodyToFlux(String.class)
+            .takeUntil("[DONE]"::equals)
             .mapNotNull(this::extractToken)
             .filter(t -> !t.isEmpty());
     }
 
     private String extractToken(String chunk) {
+        if (chunk == null || chunk.isBlank() || "[DONE]".equals(chunk.trim())) return "";
         try {
-            JsonNode node = json.readTree(chunk);
-            JsonNode token = node.path("token").path("text");
-            if (!token.isMissingNode()) return token.asText();
-            JsonNode generated = node.path("generated_text");
-            if (!generated.isMissingNode()) return generated.asText();
+            JsonNode content = json.readTree(chunk).path("choices").path(0).path("delta").path("content");
+            if (content.isTextual()) return content.asText();
         } catch (Exception ignored) {}
         return "";
     }

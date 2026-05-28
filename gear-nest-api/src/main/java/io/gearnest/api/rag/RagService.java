@@ -6,6 +6,8 @@ import io.gearnest.api.config.RagProperties;
 import io.gearnest.api.embedding.EmbeddingClient;
 import io.gearnest.api.product.ProductRepository;
 import io.gearnest.api.session.SessionBudgetService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -19,6 +21,8 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 public class RagService {
+
+    private static final Logger log = LoggerFactory.getLogger(RagService.class);
 
     private final EmbeddingClient embeddings;
     private final ChatClient chatClient;
@@ -75,6 +79,10 @@ public class RagService {
                     sendEvent(emitter, "token", token);
                 })
                 .doOnError(err -> {
+                    if (err instanceof org.springframework.web.reactive.function.client.WebClientResponseException w) {
+                        log.warn("chat stream {} body: {}", w.getStatusCode(), w.getResponseBodyAsString());
+                    }
+                    log.warn("chat stream failed (product={}): {}", productId, err.toString());
                     failure.set(err);
                     if (!committed.get()) {
                         sessions.rollback(sessionId);

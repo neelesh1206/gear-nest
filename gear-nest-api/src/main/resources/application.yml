@@ -33,8 +33,11 @@ gearnest:
   huggingface:
     api-key: ${HUGGINGFACE_API_KEY:}
     embedding-model: ${HUGGINGFACE_EMBEDDING_MODEL:BAAI/bge-small-en-v1.5}
-    chat-model: ${HUGGINGFACE_LLM_MODEL:mistralai/Mistral-7B-Instruct-v0.3}
-    base-url: https://api-inference.huggingface.co
+    # Mistral-7B-Instruct-v0.3 is not served as a chat model on the HF router;
+    # Qwen2.5-7B-Instruct is (verified 200). Override via HUGGINGFACE_LLM_MODEL.
+    chat-model: ${HUGGINGFACE_LLM_MODEL:Qwen/Qwen2.5-7B-Instruct}
+    # HF retired api-inference.huggingface.co; everything routes through router.huggingface.co.
+    base-url: ${HUGGINGFACE_BASE_URL:https://router.huggingface.co}
 
 logging:
   level:

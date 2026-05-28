@@ -28,9 +28,11 @@ public class HuggingFaceEmbeddingClient implements EmbeddingClient {
             return zeros();
         }
         try {
+            // Model id contains a '/', so build the path by concatenation rather
+            // than a URI template variable (which would percent-encode the slash).
             List<Float> embedding = webClient.post()
-                .uri("/pipeline/feature-extraction/{model}", props.embeddingModel())
-                .bodyValue(Map.of("inputs", text, "options", Map.of("wait_for_model", true)))
+                .uri("/hf-inference/models/" + props.embeddingModel() + "/pipeline/feature-extraction")
+                .bodyValue(Map.of("inputs", text))
                 .retrieve()
                 .bodyToMono(new ParameterizedTypeReference<List<Float>>() {})
                 .timeout(Duration.ofSeconds(15))
