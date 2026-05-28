@@ -1,5 +1,6 @@
 package io.gearnest.api.pricing;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.gearnest.api.product.dto.PriceComparisonResponse;
@@ -125,7 +126,7 @@ public class PricingService {
             OffsetDateTime fetchedAt = node.hasNonNull("fetched_at") ? parseTime(node.get("fetched_at").asText()) : null;
             long jitterSecs = node.hasNonNull("jitter_secs") ? node.get("jitter_secs").asLong() : 0L;
             return new PriceSnapshot(price, inStock, fetchedAt, jitterSecs);
-        } catch (Exception ex) {
+        } catch (JsonProcessingException | NumberFormatException ex) {
             return null;
         }
     }
