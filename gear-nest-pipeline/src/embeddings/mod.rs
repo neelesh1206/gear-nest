@@ -85,7 +85,11 @@ impl HuggingFaceEmbedder {
             req = req.bearer_auth(t);
         }
 
-        debug!(model = self.model.as_str(), count = inputs.len(), "HF embed");
+        debug!(
+            model = self.model.as_str(),
+            count = inputs.len(),
+            "HF embed"
+        );
         let resp = req.send().await.context("HF embed request failed")?;
         let status = resp.status();
         let text = resp.text().await.unwrap_or_default();
@@ -165,7 +169,11 @@ pub async fn insert_review_chunks(
     if rows.is_empty() {
         return Ok(0);
     }
-    assert_eq!(rows.len(), embeddings.len(), "rows/embeddings length mismatch");
+    assert_eq!(
+        rows.len(),
+        embeddings.len(),
+        "rows/embeddings length mismatch"
+    );
 
     let mut sql = String::from(
         "INSERT INTO review_chunks \
@@ -199,7 +207,10 @@ pub async fn insert_review_chunks(
             .bind(row.store_id.as_deref());
     }
     let result = q.execute(pool).await?;
-    info!(inserted = result.rows_affected(), "review_chunks bulk insert");
+    info!(
+        inserted = result.rows_affected(),
+        "review_chunks bulk insert"
+    );
     Ok(result.rows_affected())
 }
 
@@ -212,7 +223,11 @@ pub async fn insert_spec_chunks(
     if rows.is_empty() {
         return Ok(0);
     }
-    assert_eq!(rows.len(), embeddings.len(), "rows/embeddings length mismatch");
+    assert_eq!(
+        rows.len(),
+        embeddings.len(),
+        "rows/embeddings length mismatch"
+    );
 
     let mut sql = String::from(
         "INSERT INTO spec_chunks \

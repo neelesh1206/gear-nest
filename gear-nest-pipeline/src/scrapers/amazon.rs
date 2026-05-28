@@ -93,7 +93,10 @@ impl AmazonScraper {
         });
         let body_bytes = serde_json::to_vec(&body)?;
 
-        let url = format!("{}://{}{}", self.config.scheme, self.config.host, OPERATION_PATH);
+        let url = format!(
+            "{}://{}{}",
+            self.config.scheme, self.config.host, OPERATION_PATH
+        );
         let now = Utc::now();
         let amz_date = now.format("%Y%m%dT%H%M%SZ").to_string();
         let date_stamp = now.format("%Y%m%d").to_string();
@@ -148,10 +151,16 @@ impl StoreCrawler for AmazonScraper {
             let resp = self.get_items(&chunk_vec).await?;
             if let Some(errs) = &resp.errors {
                 for e in errs {
-                    warn!(code = e.code.as_str(), message = e.message.as_str(), "PA-API error");
+                    warn!(
+                        code = e.code.as_str(),
+                        message = e.message.as_str(),
+                        "PA-API error"
+                    );
                 }
             }
-            let Some(payload) = resp.items_result else { continue };
+            let Some(payload) = resp.items_result else {
+                continue;
+            };
             for item in payload.items {
                 out.push(item_to_raw(item));
             }
@@ -269,16 +278,18 @@ fn sign_v4(
     let canonical_headers = format!(
         "content-encoding:amz-1.0\nhost:{host}\nx-amz-date:{amz_date}\nx-amz-target:{TARGET}\n"
     );
-    let canonical_request = format!(
-        "POST\n{path}\n\n{canonical_headers}\n{signed_headers}\n{payload_hash}"
-    );
+    let canonical_request =
+        format!("POST\n{path}\n\n{canonical_headers}\n{signed_headers}\n{payload_hash}");
     let scope = format!("{date_stamp}/{region}/{SERVICE}/aws4_request");
     let string_to_sign = format!(
         "AWS4-HMAC-SHA256\n{amz_date}\n{scope}\n{}",
         hex_sha256(canonical_request.as_bytes())
     );
 
-    let k_date = hmac(format!("AWS4{secret_key}").as_bytes(), date_stamp.as_bytes());
+    let k_date = hmac(
+        format!("AWS4{secret_key}").as_bytes(),
+        date_stamp.as_bytes(),
+    );
     let k_region = hmac(&k_date, region.as_bytes());
     let k_service = hmac(&k_region, SERVICE.as_bytes());
     let k_signing = hmac(&k_service, b"aws4_request");

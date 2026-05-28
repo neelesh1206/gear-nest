@@ -69,9 +69,8 @@ pub async fn append_many(pool: &PgPool, recs: &[PriceRecord]) -> Result<u64> {
     if recs.is_empty() {
         return Ok(0);
     }
-    let mut sql = String::from(
-        "INSERT INTO price_history (listing_id, price, in_stock, fetched_at) VALUES ",
-    );
+    let mut sql =
+        String::from("INSERT INTO price_history (listing_id, price, in_stock, fetched_at) VALUES ");
     let mut placeholders: Vec<String> = Vec::with_capacity(recs.len());
     for i in 0..recs.len() {
         let b = i * 4;
@@ -110,12 +109,14 @@ pub async fn latest_for_listing(pool: &PgPool, listing_id: Uuid) -> Result<Optio
     .bind(listing_id)
     .fetch_optional(pool)
     .await?;
-    Ok(row.map(|(listing_id, price, in_stock, fetched_at)| PriceRecord {
-        listing_id,
-        price,
-        in_stock,
-        fetched_at,
-    }))
+    Ok(
+        row.map(|(listing_id, price, in_stock, fetched_at)| PriceRecord {
+            listing_id,
+            price,
+            in_stock,
+            fetched_at,
+        }),
+    )
 }
 
 fn month_start(d: NaiveDate) -> NaiveDate {

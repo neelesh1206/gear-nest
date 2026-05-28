@@ -9,8 +9,7 @@ use gear_nest_pipeline::{
     db,
     embeddings::HuggingFaceEmbedder,
     entity_resolution::Resolver,
-    normalizer,
-    price_history,
+    normalizer, price_history,
     prices::PriceWriter,
     scrapers::{amazon::AmazonScraper, record_raw, StoreCrawler},
 };
@@ -46,7 +45,9 @@ enum Cmd {
 #[tokio::main]
 async fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
         .with_target(false)
         .compact()
         .init();
@@ -119,7 +120,8 @@ async fn main() -> Result<()> {
                 }
 
                 if let Some(price) = raw.price.as_deref() {
-                    let listing_id = listing_id_for(&pool, &raw.store_id, &raw.store_product_id).await?;
+                    let listing_id =
+                        listing_id_for(&pool, &raw.store_id, &raw.store_product_id).await?;
                     let now = Utc::now();
                     let payload = gear_nest_pipeline::prices::PricePayload {
                         listing_id,
@@ -163,10 +165,18 @@ async fn listing_id_for(
     Ok(id)
 }
 
-fn resolve_asins(positional: Vec<String>, from_file: Option<&std::path::Path>) -> Result<Vec<String>> {
+fn resolve_asins(
+    positional: Vec<String>,
+    from_file: Option<&std::path::Path>,
+) -> Result<Vec<String>> {
     if let Some(path) = from_file {
         let text = std::fs::read_to_string(path)?;
-        Ok(text.lines().map(str::trim).filter(|l| !l.is_empty()).map(str::to_string).collect())
+        Ok(text
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(str::to_string)
+            .collect())
     } else {
         Ok(positional)
     }

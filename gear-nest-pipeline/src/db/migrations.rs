@@ -39,8 +39,8 @@ pub async fn run(pool: &PgPool, dir: &Path) -> Result<()> {
     .await
     .context("creating _gn_migrations table")?;
 
-    let migrations = discover(dir)
-        .with_context(|| format!("scanning migrations in {}", dir.display()))?;
+    let migrations =
+        discover(dir).with_context(|| format!("scanning migrations in {}", dir.display()))?;
 
     if migrations.is_empty() {
         warn!("no migration files found in {}", dir.display());

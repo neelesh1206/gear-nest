@@ -70,7 +70,10 @@ impl PriceWriter {
         if let Some(raw) = existing {
             if let Ok(prev) = serde_json::from_str::<PricePayload>(&raw) {
                 payload.jitter_secs = prev.jitter_secs;
-                debug!(jitter = payload.jitter_secs, "preserving first-write jitter");
+                debug!(
+                    jitter = payload.jitter_secs,
+                    "preserving first-write jitter"
+                );
             }
         } else {
             payload.jitter_secs = rand::thread_rng().gen_range(0..=JITTER_MAX.num_seconds());
@@ -88,11 +91,7 @@ impl PriceWriter {
         Ok(())
     }
 
-    pub async fn read(
-        &mut self,
-        product_id: Uuid,
-        store_id: &str,
-    ) -> Result<Option<PricePayload>> {
+    pub async fn read(&mut self, product_id: Uuid, store_id: &str) -> Result<Option<PricePayload>> {
         let key = price_key(product_id);
         let raw: Option<String> = self.conn.hget(&key, store_id).await?;
         let Some(raw) = raw else { return Ok(None) };

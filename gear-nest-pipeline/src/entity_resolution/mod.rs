@@ -63,8 +63,8 @@ impl<'a> Resolver<'a> {
                 }
             }
         }
-        if let Some(existing) = lookup_by_store_listing(self.pool, &raw.store_id, &raw.store_product_id)
-            .await?
+        if let Some(existing) =
+            lookup_by_store_listing(self.pool, &raw.store_id, &raw.store_product_id).await?
         {
             let confidence = MatchConfidence::Exact;
             upsert_store_listing(self.pool, existing, raw, confidence).await?;

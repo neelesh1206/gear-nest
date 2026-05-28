@@ -23,8 +23,7 @@ use gear_nest_pipeline::{
     db,
     embeddings::HuggingFaceEmbedder,
     entity_resolution::Resolver,
-    normalizer,
-    price_history,
+    normalizer, price_history,
     scrapers::{amazon::AmazonScraper, ensure_scrape_audit, record_raw, StoreCrawler},
 };
 
@@ -63,7 +62,11 @@ async fn scrape_50_amazon_products_end_to_end() {
             let requested: Vec<String> = body
                 .get("ItemIds")
                 .and_then(|v| v.as_array())
-                .map(|arr| arr.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|x| x.as_str().map(str::to_string))
+                        .collect()
+                })
                 .unwrap_or_default();
             ResponseTemplate::new(200).set_body_json(fake_paapi_response(&requested))
         })
@@ -173,7 +176,10 @@ async fn scrape_50_amazon_products_end_to_end() {
     .fetch_one(&pool)
     .await
     .unwrap();
-    assert!(spec_chunks >= PRODUCT_COUNT as i64, "≥1 spec chunk per product");
+    assert!(
+        spec_chunks >= PRODUCT_COUNT as i64,
+        "≥1 spec chunk per product"
+    );
 
     // Confidence distribution: all 50 are net-new, so all EXACT.
     let (exact,): (i64,) = sqlx::query_as(
@@ -196,16 +202,20 @@ async fn clean_fixture_rows(pool: &sqlx::PgPool, asins: &[String]) {
     .execute(pool)
     .await
     .ok();
-    sqlx::query("DELETE FROM store_listings WHERE store_id = 'amazon' AND store_product_id = ANY($1)")
-        .bind(asins)
-        .execute(pool)
-        .await
-        .ok();
-    sqlx::query("DELETE FROM _gn_scrape_audit WHERE store_id = 'amazon' AND store_product_id = ANY($1)")
-        .bind(asins)
-        .execute(pool)
-        .await
-        .ok();
+    sqlx::query(
+        "DELETE FROM store_listings WHERE store_id = 'amazon' AND store_product_id = ANY($1)",
+    )
+    .bind(asins)
+    .execute(pool)
+    .await
+    .ok();
+    sqlx::query(
+        "DELETE FROM _gn_scrape_audit WHERE store_id = 'amazon' AND store_product_id = ANY($1)",
+    )
+    .bind(asins)
+    .execute(pool)
+    .await
+    .ok();
 }
 
 fn fake_paapi_response(requested: &[String]) -> Value {

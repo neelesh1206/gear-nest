@@ -20,7 +20,9 @@ pub fn clean_title(title: &str, canonical_brand: Option<&str>) -> String {
         let needle = canon.replace('-', " ");
         let lower = s.to_lowercase();
         if lower.starts_with(&needle) {
-            s = s[needle.len()..].trim_start_matches([':', '—', '-', ' ']).to_string();
+            s = s[needle.len()..]
+                .trim_start_matches([':', '—', '-', ' '])
+                .to_string();
         }
     }
     s
@@ -80,7 +82,10 @@ mod tests {
 
     #[test]
     fn clean_title_strips_brand_prefix_and_parens() {
-        let out = clean_title("MSR PocketRocket 2 Stove (Backpacking, Camping)", Some("msr"));
+        let out = clean_title(
+            "MSR PocketRocket 2 Stove (Backpacking, Camping)",
+            Some("msr"),
+        );
         assert_eq!(out, "PocketRocket 2 Stove");
     }
 

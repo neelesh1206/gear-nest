@@ -178,7 +178,10 @@ mod tests {
         assert_eq!(canonicalize("M.S.R."), Some("msr".into()));
         assert_eq!(canonicalize("Mountain Safety Research"), Some("msr".into()));
         assert_eq!(canonicalize("Arc'teryx"), Some("arcteryx".into()));
-        assert_eq!(canonicalize("THE NORTH FACE"), Some("the-north-face".into()));
+        assert_eq!(
+            canonicalize("THE NORTH FACE"),
+            Some("the-north-face".into())
+        );
     }
 
     #[test]
