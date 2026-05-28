@@ -250,8 +250,13 @@ fn fake_paapi_response(requested: &[String]) -> Value {
 
     let items: Vec<Value> = requested
         .iter()
-        .enumerate()
-        .map(|(idx, asin)| {
+        .map(|asin| {
+            // Derive the fixture index from the ASIN itself (B0FIXT0011 → 11), not
+            // from position-in-batch: PA-API is called in chunks of 10, so an
+            // `enumerate()` index would repeat 0..9 every batch and emit duplicate
+            // GTINs/titles — which entity resolution then (correctly) merges,
+            // collapsing 50 ASINs into 10 products.
+            let idx: usize = asin.strip_prefix("B0FIXT").and_then(|s| s.parse().ok()).unwrap_or(0);
             let brand = brands[idx % brands.len()];
             let cat = categories[idx % categories.len()];
             let price = 19.99 + (idx as f64) * 7.5;
