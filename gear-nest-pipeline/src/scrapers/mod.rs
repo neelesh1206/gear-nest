@@ -13,6 +13,7 @@ use crate::models::{Category, PriceUpdate, RawProduct};
 
 pub mod amazon;
 pub mod backcountry;
+pub mod cabelas;
 pub mod campsaver;
 pub mod garagegrowngear;
 pub mod jsonld;
