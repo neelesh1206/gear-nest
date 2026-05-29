@@ -58,9 +58,12 @@ gate on live sites (non-deterministic, anti-bot, breakage). So:
    proxy transport wired via env. (ADR-014 if a proxy-strategy decision is worth recording)
 4. **Cabela's** (headless) — `chromiumoxide` browser pool (SPEC §7), fixture-backed. (ADR-015)
 5. **REI** (CJ affiliate) — CJ API client + scrape supplement.
-6. **Daily price-sync, all 8 stores** — wire `price_sync` cron
-   (`tokio-cron-scheduler`) → Redis SWR writer (exists) + `price_history` append
-   (exists). Per-store `governor` rate limits (SPEC §7).
+6. **Price-sync subcommand, all 8 stores** — add a **one-shot** `price-sync`
+   subcommand (and `full-sync`) that iterates active listings → Redis SWR writer
+   (exists) + `price_history` append (exists), with per-store `governor` rate
+   limits (SPEC §7). **Not** an in-process `tokio-cron-scheduler`: scheduling is
+   external (Cloud Scheduler → one-shot Cloud Run Job), wired in Phase 5. The
+   binary runs once and exits — see **ADR-0022**.
 7. **CANDIDATE admin endpoints** (API track — Session B scope) —
    `GET /api/admin/candidates`, `POST .../confirm`, `POST .../reassign` (SPEC §7).
    Surfaces low-confidence entity-resolution matches for review.
