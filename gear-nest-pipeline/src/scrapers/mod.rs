@@ -12,9 +12,12 @@ use uuid::Uuid;
 use crate::models::{Category, PriceUpdate, RawProduct};
 
 pub mod amazon;
+pub mod backcountry;
 pub mod campsaver;
 pub mod garagegrowngear;
 pub mod jsonld;
+pub mod moosejaw;
+pub mod steepandcheap;
 pub mod transport;
 
 /// Transport details (PA-API, clean HTTP, proxy, headless) stay behind this

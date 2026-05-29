@@ -31,7 +31,7 @@ Sessions claim a reserved number and fill in content. They do **not** renumber.
 - [0011 — MinHash Stage 2 gated at 150-char review body length](./0011-minhash-150-char-threshold.md)
 - [0012 — GCP (Cloud Run + Cloud SQL) over Fly.io](./0012-gcp-over-flyio.md)
 - [0013 — Extend StoreCrawler for discovery + a tiered transport abstraction](./0013-storecrawler-transport-tiers.md)
-- [0014 — *reserved (Pipeline)*](./0014-reserved-pipeline.md)
+- [0014 — Proxy tier delegates IP rotation to the provider](./0014-proxy-tier-residential-rotation.md)
 - [0015 — *reserved (Pipeline)*](./0015-reserved-pipeline.md)
 - [0016 — *reserved (API)*](./0016-reserved-api.md)
 - [0017 — *reserved (API)*](./0017-reserved-api.md)
