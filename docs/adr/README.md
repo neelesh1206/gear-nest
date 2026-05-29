@@ -39,3 +39,4 @@ Sessions claim a reserved number and fill in content. They do **not** renumber.
 - [0019 — *reserved (Web)*](./0019-reserved-web.md)
 - [0020 — *reserved (Web)*](./0020-reserved-web.md)
 - [0021 — Redis price schema is a pinned cross-service contract](./0021-redis-schema-contract.md)
+- [0022 — External scheduling (Cloud Scheduler → one-shot Cloud Run Job) over in-process cron](./0022-external-scheduling-over-in-process-cron.md)
