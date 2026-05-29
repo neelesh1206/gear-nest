@@ -1,9 +1,9 @@
-//! `CampSaver` — the reference clean-HTTP tier scraper (SPEC §7).
+//! Garage Grown Gear — clean-HTTP tier scraper for a Shopify cottage-gear store.
 //!
-//! A thin adapter: it owns the transport tier and `CampSaver`'s URL
-//! conventions, and delegates all field extraction to the shared
-//! [`crate::scrapers::jsonld`] parser. Parsing is exercised offline against
-//! `tests/fixtures/campsaver_product.html` so CI never depends on the live site.
+//! Same shape as [`crate::scrapers::campsaver`]: owns the transport tier and
+//! Shopify's `/collections/{handle}` + `/products/{handle}` URL conventions,
+//! and delegates field extraction to the shared [`crate::scrapers::jsonld`]
+//! parser. Tested offline against `tests/fixtures/garagegrowngear_product.html`.
 
 use anyhow::Result;
 use async_trait::async_trait;
@@ -13,16 +13,18 @@ use crate::models::{Category, PriceUpdate, RawProduct};
 use crate::scrapers::transport::{Tier, Transport};
 use crate::scrapers::{jsonld, StoreCrawler};
 
-const STORE_ID: &str = "campsaver";
-const BASE_URL: &str = "https://www.campsaver.com";
-/// Cap per category crawl so one run cannot fan out unbounded.
-const MAX_PRODUCTS_PER_CATEGORY: usize = 60;
+/// The `stores` seed (migration 0001) registers this store under the slug
+/// `garagerowngear`; it must match for the `store_listings.store_id` FK.
+const STORE_ID: &str = "garagerowngear";
+const BASE_URL: &str = "https://www.garagegrowngear.com";
+/// Small indie site — crawl gently (SPEC §7 assigns it the lowest rate limit).
+const MAX_PRODUCTS_PER_CATEGORY: usize = 40;
 
-pub struct CampSaverScraper {
+pub struct GarageGrownGearScraper {
     transport: Box<dyn Transport>,
 }
 
-impl CampSaverScraper {
+impl GarageGrownGearScraper {
     pub fn new() -> Result<Self> {
         Ok(Self {
             transport: Tier::CleanHttp.transport(STORE_ID)?,
@@ -30,22 +32,22 @@ impl CampSaverScraper {
     }
 
     fn category_url(category: &Category) -> String {
-        format!("{BASE_URL}/{}", category.slug.trim_matches('/'))
+        format!("{BASE_URL}/collections/{}", category.slug.trim_matches('/'))
     }
 
-    /// PR6 passes the listing's stored `store_url`; a bare slug is resolved
-    /// against the base URL.
+    /// PR6 passes the listing's stored `store_url`; a bare handle is resolved
+    /// to the Shopify product path.
     fn product_url(store_product_id: &str) -> String {
         if store_product_id.starts_with("http") {
             store_product_id.to_string()
         } else {
-            format!("{BASE_URL}/{}", store_product_id.trim_matches('/'))
+            format!("{BASE_URL}/products/{}", store_product_id.trim_matches('/'))
         }
     }
 }
 
 #[async_trait]
-impl StoreCrawler for CampSaverScraper {
+impl StoreCrawler for GarageGrownGearScraper {
     fn store_id(&self) -> &str {
         STORE_ID
     }
@@ -58,9 +60,9 @@ impl StoreCrawler for CampSaverScraper {
             match self.transport.get(&url).await {
                 Ok(html) => match jsonld::parse_product(&html, &url, STORE_ID) {
                     Ok(product) => out.push(product),
-                    Err(e) => warn!(url, error = %e, "campsaver: product parse skipped"),
+                    Err(e) => warn!(url, error = %e, "garagegrowngear: product parse skipped"),
                 },
-                Err(e) => warn!(url, error = %e, "campsaver: product fetch skipped"),
+                Err(e) => warn!(url, error = %e, "garagegrowngear: product fetch skipped"),
             }
         }
         Ok(out)
