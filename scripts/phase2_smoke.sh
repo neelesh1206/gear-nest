@@ -191,14 +191,16 @@ else
     for _ in $(seq 1 30); do
       curl -fsS http://localhost:8080/actuator/health >/dev/null 2>&1 && break; sleep 2
     done
-    slug=$(sql "SELECT slug FROM products p
-                JOIN store_listings sl ON sl.product_id = p.id
-                GROUP BY p.id, p.slug HAVING count(DISTINCT sl.store_id) >= 2 LIMIT 1;")
-    if [[ -n "$slug" ]]; then
-      body=$(curl -fsS "http://localhost:8080/api/v1/products/${slug}/prices" 2>/dev/null || true)
+    # /api/v1/products/{id}/prices — the contract declares {id} as UUID
+    # (docs/api/openapi.yaml; @PathVariable UUID id in PricingController), so
+    # pass the product UUID, not the slug.
+    pid=$(sql "SELECT product_id::text FROM store_listings
+               GROUP BY product_id HAVING count(DISTINCT store_id) >= 2 LIMIT 1;")
+    if [[ -n "$pid" ]]; then
+      body=$(curl -fsS "http://localhost:8080/api/v1/products/${pid}/prices" 2>/dev/null || true)
       cnt=$(grep -o '"storeId"' <<<"$body" | wc -l | tr -d '[:space:]')
-      [[ "${cnt:-0}" -ge 2 ]] && pass "GET /products/${slug}/prices returned $cnt store quotes" \
-                              || fail "API price comparison returned ${cnt:-0} quotes for ${slug}"
+      [[ "${cnt:-0}" -ge 2 ]] && pass "GET /products/${pid}/prices returned $cnt store quotes" \
+                              || fail "API price comparison returned ${cnt:-0} quotes for ${pid}"
     else
       skip "no cross-store product to query the API with"
     fi
