@@ -9,19 +9,45 @@ use sqlx::postgres::PgPool;
 use tracing::info;
 use uuid::Uuid;
 
-use crate::models::RawProduct;
+use crate::models::{Category, PriceUpdate, RawProduct};
 
 pub mod amazon;
+pub mod campsaver;
+pub mod transport;
 
+/// Transport details (PA-API, clean HTTP, proxy, headless) stay behind this
+/// trait so the normalizer / resolver / embedder never learn how a store is
+/// reached. A store implements only the methods its tier supports; the others
+/// keep their defaults and surface a loud error if mis-dispatched. See ADR-013.
 #[async_trait]
 pub trait StoreCrawler: Send + Sync {
     /// Stable store identifier matching the `stores.id` column.
     fn store_id(&self) -> &str;
 
-    /// Fetch a batch of products by the store's native product identifier.
-    /// The Amazon PA API accepts up to 10 ASINs per `GetItems` call; other
-    /// crawlers will batch differently. Implementations chunk internally.
-    async fn fetch_batch(&self, ids: &[String]) -> Result<Vec<RawProduct>>;
+    /// API stores fetch by their native product identifier. The Amazon PA-API
+    /// accepts up to 10 ASINs per `GetItems` call; other API crawlers batch
+    /// differently. Implementations chunk internally.
+    async fn fetch_batch(&self, _ids: &[String]) -> Result<Vec<RawProduct>> {
+        anyhow::bail!(
+            "{} does not support fetch_batch (not an API store)",
+            self.store_id()
+        )
+    }
+
+    /// Scrape stores have no ID list — they discover products by crawling a
+    /// category's landing pages.
+    async fn crawl_products(&self, _category: &Category) -> Result<Vec<RawProduct>> {
+        anyhow::bail!(
+            "{} does not support crawl_products (not a scrape store)",
+            self.store_id()
+        )
+    }
+
+    /// Refresh the live price + stock for a single known product. Used by the
+    /// daily price-sync across all tiers.
+    async fn fetch_price(&self, _store_product_id: &str) -> Result<PriceUpdate> {
+        anyhow::bail!("{} does not implement fetch_price", self.store_id())
+    }
 }
 
 /// Persist a raw scrape payload to a per-run audit log. Idempotent on
