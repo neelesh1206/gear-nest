@@ -18,6 +18,7 @@ pub mod campsaver;
 pub mod garagegrowngear;
 pub mod jsonld;
 pub mod moosejaw;
+pub mod rei;
 pub mod steepandcheap;
 pub mod transport;
 

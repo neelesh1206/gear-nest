@@ -1,0 +1,34 @@
+{
+  "data": {
+    "products": {
+      "totalCount": 2,
+      "resultList": [
+        {
+          "id": "REI-1098765",
+          "title": "REI Co-op Half Dome SL 2+ Tent",
+          "description": "A roomy, freestanding two-person backpacking tent with\n          color-coded poles, two doors, and two vestibules.",
+          "brand": "REI Co-op",
+          "gtin": "0099887766551",
+          "imageLink": "https://www.rei.com/media/1098765/half-dome-sl-2-plus.jpg",
+          "link": "https://www.rei.com/product/1098765/rei-co-op-half-dome-sl-2-plus-tent",
+          "availability": "in stock",
+          "productType": "Camp & Hike > Tents > Backpacking Tents",
+          "price": { "amount": "279.00", "currency": "USD" },
+          "salePrice": { "amount": "209.93", "currency": "USD" }
+        },
+        {
+          "id": "REI-2055512",
+          "title": "REI Co-op Trailmade 30 Sleeping Bag",
+          "description": "A synthetic-insulated 30-degree bag for three-season trips.",
+          "brand": "REI Co-op",
+          "gtin": "0099887700022",
+          "imageLink": "https://www.rei.com/media/2055512/trailmade-30.jpg",
+          "link": "https://www.rei.com/product/2055512/rei-co-op-trailmade-30-sleeping-bag",
+          "availability": "out of stock",
+          "productType": "Camp & Hike > Sleeping Bags",
+          "price": { "amount": "99.95", "currency": "USD" }
+        }
+      ]
+    }
+  }
+}
