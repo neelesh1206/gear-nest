@@ -197,7 +197,9 @@ pub fn merge_supplement(primary: RawProduct, supplement: RawProduct) -> RawProdu
             primary.specs
         },
         primary_image: primary.primary_image.or(supplement.primary_image),
-        gtin: primary.gtin.or(supplement.gtin),
+        // CJ-only: GTIN drives Tier-1 entity resolution (ADR-007), so a scraped
+        // GTIN must never stand in for CJ's — even when CJ omits one (ADR-0023).
+        gtin: primary.gtin,
         price: primary.price,
         in_stock: primary.in_stock,
         store_rating: primary.store_rating.or(supplement.store_rating),
