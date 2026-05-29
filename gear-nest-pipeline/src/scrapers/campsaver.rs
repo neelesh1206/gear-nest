@@ -18,6 +18,17 @@ const BASE_URL: &str = "https://www.campsaver.com";
 /// Cap per category crawl so one run cannot fan out unbounded.
 const MAX_PRODUCTS_PER_CATEGORY: usize = 60;
 
+/// Full-sync seed categories. Slugs come from the live site's category URL
+/// scheme (`/tents-shelters`, etc.). Kept small on purpose — five mainstream
+/// outdoor categories cover the catalog overlap we resolve cross-store.
+const CATEGORIES: &[(&str, &str)] = &[
+    ("tents-shelters", "Tents & Shelters"),
+    ("sleeping-bags", "Sleeping Bags"),
+    ("backpacks", "Backpacks"),
+    ("camp-kitchen", "Camp Kitchen"),
+    ("mens-apparel", "Men's Apparel"),
+];
+
 pub struct CampSaverScraper {
     transport: Box<dyn Transport>,
 }
@@ -70,5 +81,15 @@ impl StoreCrawler for CampSaverScraper {
         let url = Self::product_url(store_product_id);
         let html = self.transport.get(&url).await?;
         jsonld::parse_price(&html, STORE_ID, store_product_id)
+    }
+
+    fn categories(&self) -> Vec<Category> {
+        CATEGORIES
+            .iter()
+            .map(|(slug, label)| Category {
+                slug: (*slug).to_string(),
+                label: (*label).to_string(),
+            })
+            .collect()
     }
 }

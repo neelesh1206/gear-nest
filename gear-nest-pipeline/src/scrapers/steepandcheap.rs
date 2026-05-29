@@ -18,6 +18,16 @@ const STORE_ID: &str = "steepandcheap";
 const BASE_URL: &str = "https://www.steepandcheap.com";
 const MAX_PRODUCTS_PER_CATEGORY: usize = 60;
 
+/// Full-sync seed categories. Slugs from the live site's URL scheme
+/// (e.g. `/mens-rain-shells` from the captured fixture).
+const CATEGORIES: &[(&str, &str)] = &[
+    ("tents", "Tents"),
+    ("sleeping-bags", "Sleeping Bags"),
+    ("backpacks", "Backpacks"),
+    ("mens-rain-shells", "Men's Rain Shells"),
+    ("mens-jackets", "Men's Jackets"),
+];
+
 pub struct SteepAndCheapScraper {
     transport: Box<dyn Transport>,
 }
@@ -70,5 +80,15 @@ impl StoreCrawler for SteepAndCheapScraper {
         let url = Self::product_url(store_product_id);
         let html = self.transport.get(&url).await?;
         jsonld::parse_price(&html, STORE_ID, store_product_id)
+    }
+
+    fn categories(&self) -> Vec<Category> {
+        CATEGORIES
+            .iter()
+            .map(|(slug, label)| Category {
+                slug: (*slug).to_string(),
+                label: (*label).to_string(),
+            })
+            .collect()
     }
 }

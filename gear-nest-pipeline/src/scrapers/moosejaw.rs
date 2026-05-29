@@ -17,6 +17,16 @@ const STORE_ID: &str = "moosejaw";
 const BASE_URL: &str = "https://www.moosejaw.com";
 const MAX_PRODUCTS_PER_CATEGORY: usize = 60;
 
+/// Full-sync seed categories. Slug paths include `camping/...` per the live
+/// site's nested URL scheme (matches the captured fixture's breadcrumb).
+const CATEGORIES: &[(&str, &str)] = &[
+    ("camping/tents", "Tents"),
+    ("camping/sleeping-bags", "Sleeping Bags"),
+    ("camping/backpacks", "Backpacks"),
+    ("camping/headlamps", "Headlamps"),
+    ("mens-jackets", "Men's Jackets"),
+];
+
 pub struct MoosejawScraper {
     transport: Box<dyn Transport>,
 }
@@ -69,5 +79,15 @@ impl StoreCrawler for MoosejawScraper {
         let url = Self::product_url(store_product_id);
         let html = self.transport.get(&url).await?;
         jsonld::parse_price(&html, STORE_ID, store_product_id)
+    }
+
+    fn categories(&self) -> Vec<Category> {
+        CATEGORIES
+            .iter()
+            .map(|(slug, label)| Category {
+                slug: (*slug).to_string(),
+                label: (*label).to_string(),
+            })
+            .collect()
     }
 }

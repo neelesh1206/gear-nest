@@ -23,6 +23,17 @@ use crate::scrapers::{jsonld, StoreCrawler};
 
 const STORE_ID: &str = "rei";
 
+/// Full-sync seed categories. REI's discovery is keyword search against the
+/// CJ affiliate API — `Category::label` becomes the search term — so these
+/// are product keywords rather than URL slugs.
+const CATEGORIES: &[(&str, &str)] = &[
+    ("tent", "tent"),
+    ("sleeping bag", "sleeping bag"),
+    ("backpack", "backpack"),
+    ("camp stove", "camp stove"),
+    ("rain jacket", "rain jacket"),
+];
+
 const CJ_QUERY: &str =
     "query Products($companyId: ID!, $partnerIds: [ID!], $keywords: [String!], $limit: Int) { \
 products(companyId: $companyId, partnerIds: $partnerIds, keywords: $keywords, limit: $limit) { \
@@ -151,6 +162,16 @@ impl StoreCrawler for ReiScraper {
             in_stock: item.in_stock,
             fetched_at: Utc::now(),
         })
+    }
+
+    fn categories(&self) -> Vec<Category> {
+        CATEGORIES
+            .iter()
+            .map(|(slug, label)| Category {
+                slug: (*slug).to_string(),
+                label: (*label).to_string(),
+            })
+            .collect()
     }
 }
 

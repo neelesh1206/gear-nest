@@ -20,6 +20,16 @@ const BASE_URL: &str = "https://www.garagegrowngear.com";
 /// Small indie site — crawl gently (SPEC §7 assigns it the lowest rate limit).
 const MAX_PRODUCTS_PER_CATEGORY: usize = 40;
 
+/// Full-sync seed categories. Shopify `/collections/{handle}` namespace; slugs
+/// from the live site (matches the breadcrumbs in the captured fixture).
+const CATEGORIES: &[(&str, &str)] = &[
+    ("tents", "Tents"),
+    ("sleeping-bags", "Sleeping Bags"),
+    ("backpacks", "Backpacks"),
+    ("cookware", "Cookware"),
+    ("apparel", "Apparel"),
+];
+
 pub struct GarageGrownGearScraper {
     transport: Box<dyn Transport>,
 }
@@ -72,5 +82,15 @@ impl StoreCrawler for GarageGrownGearScraper {
         let url = Self::product_url(store_product_id);
         let html = self.transport.get(&url).await?;
         jsonld::parse_price(&html, STORE_ID, store_product_id)
+    }
+
+    fn categories(&self) -> Vec<Category> {
+        CATEGORIES
+            .iter()
+            .map(|(slug, label)| Category {
+                slug: (*slug).to_string(),
+                label: (*label).to_string(),
+            })
+            .collect()
     }
 }

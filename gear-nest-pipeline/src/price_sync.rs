@@ -29,8 +29,9 @@ use crate::scrapers::{
 };
 
 /// Per-store courtesy rate limits in requests/sec (SPEC §7). Keys match
-/// `stores.id`.
-const STORE_RATE_LIMITS: &[(&str, u32)] = &[
+/// `stores.id`. Shared with [`crate::full_sync`] so both jobs throttle each
+/// store on the same budget.
+pub(crate) const STORE_RATE_LIMITS: &[(&str, u32)] = &[
     ("amazon", 1),
     ("rei", 3),
     ("backcountry", 2),
@@ -74,7 +75,7 @@ pub fn build_crawlers(cfg: &Config) -> Result<HashMap<&'static str, Box<dyn Stor
     Ok(m)
 }
 
-fn rate_limiters() -> HashMap<&'static str, DefaultDirectRateLimiter> {
+pub(crate) fn rate_limiters() -> HashMap<&'static str, DefaultDirectRateLimiter> {
     STORE_RATE_LIMITS
         .iter()
         .map(|(id, rps)| {
