@@ -39,4 +39,3 @@ Sessions claim a reserved number and fill in content. They do **not** renumber.
 - [0019 — *reserved (Web)*](./0019-reserved-web.md)
 - [0020 — *reserved (Web)*](./0020-reserved-web.md)
 - [0021 — Redis price schema is a pinned cross-service contract](./0021-redis-schema-contract.md)
-- [0022 — REI = CJ affiliate feed primary, scrape fills the blanks](./0022-rei-cj-primary-scrape-supplement.md)
