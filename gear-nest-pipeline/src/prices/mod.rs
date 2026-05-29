@@ -97,6 +97,16 @@ impl PriceWriter {
         let Some(raw) = raw else { return Ok(None) };
         Ok(Some(serde_json::from_str(&raw)?))
     }
+
+    /// Stamp the `prices:last_updated` marker after a full sync (RFC3339 UTC),
+    /// per the Redis schema contract (`docs/contracts/redis-schema.md`).
+    pub async fn set_last_updated(&mut self, ts: DateTime<Utc>) -> Result<()> {
+        let _: () = self
+            .conn
+            .set("prices:last_updated", ts.to_rfc3339())
+            .await?;
+        Ok(())
+    }
 }
 
 #[inline]
