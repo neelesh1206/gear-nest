@@ -7,8 +7,14 @@ use std::time::Duration;
 
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use chromiumoxide::browser::{Browser, BrowserConfig};
+use futures::StreamExt;
 use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, ACCEPT_LANGUAGE, USER_AGENT};
 use reqwest::Client;
+use tokio::sync::{Mutex, Semaphore};
+
+/// Max concurrent headless tabs inside the single browser (SPEC §7).
+const HEADLESS_MAX_TABS: usize = 3;
 
 /// The transport tier a store is reached through.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -17,7 +23,8 @@ pub enum Tier {
     CleanHttp,
     /// Same client, routed through `SCRAPE_PROXY_{STORE}` if set.
     Proxy,
-    /// `chromiumoxide` browser pool — lands in Phase 2 PR4 (ADR-015).
+    /// `chromiumoxide` browser pool — renders JS-gated pages. Requires a Chrome
+    /// / Chromium binary at runtime (ADR-015).
     Headless,
 }
 
@@ -28,9 +35,7 @@ impl Tier {
         match self {
             Self::CleanHttp => Ok(Box::new(HttpTransport::new(None)?)),
             Self::Proxy => Ok(Box::new(HttpTransport::new(proxy_for(store_id))?)),
-            Self::Headless => {
-                anyhow::bail!("headless transport for {store_id} lands in Phase 2 PR4 (ADR-015)")
-            }
+            Self::Headless => Ok(Box::new(HeadlessTransport::new())),
         }
     }
 }
@@ -79,6 +84,67 @@ impl Transport for HttpTransport {
             anyhow::bail!("GET {url} -> HTTP {status}");
         }
         Ok(body)
+    }
+}
+
+/// Headless tier: a single long-lived `chromiumoxide` browser, lazily launched
+/// on first use, with a `Semaphore` capping concurrent tabs (SPEC §7). Each
+/// `get` opens a tab, waits for navigation, snapshots the rendered DOM, and
+/// closes the tab. One browser process keeps peak memory bounded; the semaphore
+/// keeps it to a few hundred MB even under fan-out.
+struct HeadlessTransport {
+    tabs: Semaphore,
+    browser: Mutex<Option<Browser>>,
+}
+
+impl HeadlessTransport {
+    fn new() -> Self {
+        Self {
+            tabs: Semaphore::new(HEADLESS_MAX_TABS),
+            browser: Mutex::new(None),
+        }
+    }
+
+    /// Launch headless Chrome and spawn the CDP event pump it needs to make
+    /// progress. `--no-sandbox` so it runs inside a container.
+    async fn launch() -> Result<Browser> {
+        let config = BrowserConfig::builder()
+            .no_sandbox()
+            .build()
+            .map_err(|e| anyhow::anyhow!("headless browser config: {e}"))?;
+        let (browser, mut handler) = Browser::launch(config)
+            .await
+            .context("launching headless Chrome (is a chromium binary installed?)")?;
+        tokio::spawn(async move { while handler.next().await.is_some() {} });
+        Ok(browser)
+    }
+}
+
+#[async_trait]
+impl Transport for HeadlessTransport {
+    async fn get(&self, url: &str) -> Result<String> {
+        let _tab = self.tabs.acquire().await.context("tab semaphore closed")?;
+        // Hold the browser lock only to open the tab; the slow navigation +
+        // DOM snapshot run with the lock released so tabs render in parallel.
+        let page = {
+            let mut guard = self.browser.lock().await;
+            if guard.is_none() {
+                *guard = Some(Self::launch().await?);
+            }
+            guard
+                .as_ref()
+                .expect("browser launched above")
+                .new_page(url)
+                .await
+                .with_context(|| format!("opening headless tab for {url}"))?
+        };
+        page.wait_for_navigation().await.ok();
+        let html = page
+            .content()
+            .await
+            .with_context(|| format!("reading rendered DOM for {url}"))?;
+        page.close().await.ok();
+        Ok(html)
     }
 }
 
