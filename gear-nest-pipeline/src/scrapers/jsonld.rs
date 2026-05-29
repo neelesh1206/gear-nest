@@ -201,8 +201,13 @@ fn gtin(node: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
+/// schema.org availability → purchasable? Treat anything not explicitly
+/// unavailable as in stock, so flash-sale states like `LimitedAvailability`
+/// (Steep & Cheap) and `PreOrder` count as available.
 fn availability_in_stock(availability: &str) -> bool {
-    availability.contains("InStock")
+    !["OutOfStock", "SoldOut", "Discontinued"]
+        .iter()
+        .any(|unavailable| availability.contains(unavailable))
 }
 
 fn brand_name(brand: &Value) -> Option<String> {
