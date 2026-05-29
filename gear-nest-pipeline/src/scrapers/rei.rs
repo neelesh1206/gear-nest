@@ -5,7 +5,7 @@
 //! structured specs / long descriptions / reviews, so each CJ record is
 //! supplemented by a clean-HTTP scrape of the REI product page (the shared
 //! [`crate::scrapers::jsonld`] parser) and merged: CJ is authoritative for
-//! commerce fields, the scrape only fills blanks. See ADR-022.
+//! commerce fields, the scrape only fills blanks (see [`merge_supplement`]).
 
 use std::time::Duration;
 
@@ -171,7 +171,8 @@ pub fn parse_cj_response(json: &str) -> Result<Vec<RawProduct>> {
 
 /// Merge a scraped product onto the CJ record. CJ wins on the commerce fields
 /// (price, stock, GTIN, id, url, title); the scrape only fills what CJ left
-/// blank (specs, description, category, image, rating). See ADR-022.
+/// blank (specs, description, category, image, rating). CJ is paid-on and must
+/// match the click destination, so it stays authoritative for price + link.
 pub fn merge_supplement(primary: RawProduct, supplement: RawProduct) -> RawProduct {
     RawProduct {
         store_id: primary.store_id,
@@ -269,10 +270,15 @@ fn cj_price(item: &Value) -> Option<String> {
         })
 }
 
+/// CJ availability strings are lowercase prose ("in stock" / "out of stock").
+/// Mirror `jsonld::availability_in_stock`: anything not explicitly unavailable
+/// counts as in stock.
 fn cj_in_stock(item: &Value) -> Option<bool> {
     item.get("availability").and_then(Value::as_str).map(|a| {
         let a = a.to_lowercase();
-        !a.contains("out of stock") && !a.contains("sold out")
+        !["out of stock", "sold out", "discontinued"]
+            .iter()
+            .any(|unavailable| a.contains(unavailable))
     })
 }
 
