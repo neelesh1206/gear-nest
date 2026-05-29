@@ -1,0 +1,18 @@
+# Cargo build artifacts — re-built inside the image, would otherwise ship
+# the ~2.3GB host target/ to the Docker daemon (has filled the Colima VM).
+target/
+**/target/
+
+# Git history isn't needed at build time.
+.git/
+.gitignore
+
+# Editor / OS noise.
+.idea/
+.vscode/
+.DS_Store
+
+# Local environment overrides (handled via docker-compose env_file).
+.env
+.env.local
+.env.*.local

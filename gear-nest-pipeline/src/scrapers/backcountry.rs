@@ -18,6 +18,16 @@ const STORE_ID: &str = "backcountry";
 const BASE_URL: &str = "https://www.backcountry.com";
 const MAX_PRODUCTS_PER_CATEGORY: usize = 60;
 
+/// Full-sync seed categories. Slugs match the live site's category URL scheme
+/// (e.g. `/mens-jackets` from the captured fixture's breadcrumb).
+const CATEGORIES: &[(&str, &str)] = &[
+    ("tents", "Tents"),
+    ("sleeping-bags", "Sleeping Bags"),
+    ("backpacks", "Backpacks"),
+    ("mens-jackets", "Men's Jackets"),
+    ("camping-stoves", "Camping Stoves"),
+];
+
 pub struct BackcountryScraper {
     transport: Box<dyn Transport>,
 }
@@ -70,5 +80,15 @@ impl StoreCrawler for BackcountryScraper {
         let url = Self::product_url(store_product_id);
         let html = self.transport.get(&url).await?;
         jsonld::parse_price(&html, STORE_ID, store_product_id)
+    }
+
+    fn categories(&self) -> Vec<Category> {
+        CATEGORIES
+            .iter()
+            .map(|(slug, label)| Category {
+                slug: (*slug).to_string(),
+                label: (*label).to_string(),
+            })
+            .collect()
     }
 }

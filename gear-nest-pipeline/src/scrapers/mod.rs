@@ -50,6 +50,15 @@ pub trait StoreCrawler: Send + Sync {
         )
     }
 
+    /// Curated category seeds the `full-sync` job iterates over. Crawl stores
+    /// override with a small static list (5-ish slugs, matching their site's
+    /// URL conventions); API-only stores leave the default empty so full-sync
+    /// skips them. Dynamic discovery is a follow-up if these seeds need to
+    /// expand.
+    fn categories(&self) -> Vec<Category> {
+        Vec::new()
+    }
+
     /// Refresh the live price + stock for a single known product. Used by the
     /// daily price-sync across all tiers.
     async fn fetch_price(&self, _store_product_id: &str) -> Result<PriceUpdate> {

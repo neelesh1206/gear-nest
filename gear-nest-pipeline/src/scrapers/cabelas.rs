@@ -20,6 +20,16 @@ const BASE_URL: &str = "https://www.cabelas.com";
 /// Headless is the most expensive tier — crawl a small slice per category.
 const MAX_PRODUCTS_PER_CATEGORY: usize = 30;
 
+/// Full-sync seed categories. Slugs follow the live site's nested
+/// `/camping/{leaf}` scheme (matches the captured fixture's breadcrumb).
+const CATEGORIES: &[(&str, &str)] = &[
+    ("camping/tents", "Tents"),
+    ("camping/sleeping-bags", "Sleeping Bags"),
+    ("camping/backpacks", "Backpacks"),
+    ("camping/stoves", "Stoves"),
+    ("camping/coolers", "Coolers"),
+];
+
 pub struct CabelasScraper {
     transport: Box<dyn Transport>,
 }
@@ -72,5 +82,15 @@ impl StoreCrawler for CabelasScraper {
         let url = Self::product_url(store_product_id);
         let html = self.transport.get(&url).await?;
         jsonld::parse_price(&html, STORE_ID, store_product_id)
+    }
+
+    fn categories(&self) -> Vec<Category> {
+        CATEGORIES
+            .iter()
+            .map(|(slug, label)| Category {
+                slug: (*slug).to_string(),
+                label: (*label).to_string(),
+            })
+            .collect()
     }
 }

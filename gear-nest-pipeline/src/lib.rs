@@ -15,6 +15,7 @@ pub mod config;
 pub mod db;
 pub mod embeddings;
 pub mod entity_resolution;
+pub mod full_sync;
 pub mod models;
 pub mod normalizer;
 pub mod price_history;

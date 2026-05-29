@@ -9,7 +9,7 @@ use gear_nest_pipeline::{
     db,
     embeddings::HuggingFaceEmbedder,
     entity_resolution::Resolver,
-    normalizer, price_history, price_sync,
+    full_sync, normalizer, price_history, price_sync,
     prices::PriceWriter,
     scrapers::{amazon::AmazonScraper, record_raw, StoreCrawler},
 };
@@ -43,6 +43,12 @@ enum Cmd {
     /// Run one full price sync across all 8 stores, then exit. Scheduling is
     /// external (Cloud Scheduler → one-shot Cloud Run Job), per ADR-0022.
     PriceSync,
+    /// Crawl every scrape store's curated category seeds end-to-end
+    /// (`record_raw` → normalize → resolve → embed → upsert listing → Redis
+    /// SWR + `price_history`) then exit. Closes the crawl→persist seam that
+    /// `price-sync` depends on. Scheduled externally (`0 2 * * 0` weekly) per
+    /// ADR-0022.
+    FullSync,
 }
 
 #[tokio::main]
@@ -71,6 +77,7 @@ async fn main() -> Result<()> {
             price_history::ensure_partitions(&pool, Utc::now()).await?;
         }
         Cmd::PriceSync => run_price_sync(&cfg).await?,
+        Cmd::FullSync => run_full_sync(&cfg).await?,
         Cmd::ScrapeAmazon { asins, from_file } => {
             let asins = resolve_asins(asins, from_file.as_deref())?;
             info!(count = asins.len(), "scrape-amazon");
@@ -164,6 +171,25 @@ async fn run_price_sync(cfg: &Config) -> Result<()> {
         skipped = report.skipped,
         failed = report.failed,
         "price-sync done"
+    );
+    Ok(())
+}
+
+async fn run_full_sync(cfg: &Config) -> Result<()> {
+    let pool = db::connect(&cfg.database_url).await?;
+    price_history::ensure_partitions(&pool, Utc::now()).await?;
+    let mut writer = PriceWriter::connect(&cfg.redis_url).await?;
+    let embedder = HuggingFaceEmbedder::with_base_url(
+        cfg.huggingface_token.clone(),
+        cfg.huggingface_model.clone(),
+        cfg.huggingface_base_url.clone(),
+    )?;
+    let report = full_sync::run(cfg, &pool, &mut writer, &embedder).await?;
+    info!(
+        products = report.products,
+        failed = report.failed,
+        stores_skipped = report.stores_skipped,
+        "full-sync done"
     );
     Ok(())
 }
