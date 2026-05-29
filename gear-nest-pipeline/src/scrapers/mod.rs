@@ -13,6 +13,8 @@ use crate::models::{Category, PriceUpdate, RawProduct};
 
 pub mod amazon;
 pub mod campsaver;
+pub mod garagegrowngear;
+pub mod jsonld;
 pub mod transport;
 
 /// Transport details (PA-API, clean HTTP, proxy, headless) stay behind this
