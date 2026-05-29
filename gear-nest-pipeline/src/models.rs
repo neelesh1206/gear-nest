@@ -73,3 +73,25 @@ pub struct PriceRecord {
     pub in_stock: Option<bool>,
     pub fetched_at: DateTime<Utc>,
 }
+
+/// A crawl seed: a store-agnostic category to discover products under. Scrape
+/// stores have no ID list, so they crawl category landing pages. Each store
+/// maps `slug` to its own category URL.
+#[derive(Debug, Clone)]
+pub struct Category {
+    pub slug: String,
+    pub label: String,
+}
+
+/// A price/stock snapshot fetched straight from a store, before the canonical
+/// `listing_id` is resolved. The price-sync job maps `store_product_id` →
+/// `listing_id` before writing to Redis / `price_history`.
+#[derive(Debug, Clone)]
+pub struct PriceUpdate {
+    pub store_id: String,
+    pub store_product_id: String,
+    /// Fixed-point decimal string (e.g. "129.99"); `None` when unavailable.
+    pub price: Option<String>,
+    pub in_stock: Option<bool>,
+    pub fetched_at: DateTime<Utc>,
+}
