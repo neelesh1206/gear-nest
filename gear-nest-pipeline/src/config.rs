@@ -12,6 +12,7 @@ pub struct Config {
     /// point at a wiremock instance; production code leaves this `None`.
     pub huggingface_base_url: Option<String>,
     pub paapi: PaapiConfig,
+    pub cj: CjConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -23,6 +24,19 @@ pub struct PaapiConfig {
     pub region: String,
     /// "https" in prod, "http" in test (wiremock).
     pub scheme: String,
+}
+
+/// CJ (Commission Junction) affiliate API — REI's product feed (SPEC §7).
+#[derive(Debug, Clone)]
+pub struct CjConfig {
+    /// Personal access token, sent as `Authorization: Bearer`.
+    pub api_key: Option<String>,
+    /// The publisher's CJ company id (`companyId` in the GraphQL query).
+    pub website_id: Option<String>,
+    /// REI's CJ advertiser id (`partnerIds`).
+    pub advertiser_id: Option<String>,
+    /// GraphQL endpoint. Overridden in tests to point at a wiremock instance.
+    pub endpoint: String,
 }
 
 impl Config {
@@ -42,6 +56,13 @@ impl Config {
                 host: env::var("PAAPI_HOST").unwrap_or_else(|_| "webservices.amazon.com".into()),
                 region: env::var("PAAPI_REGION").unwrap_or_else(|_| "us-east-1".into()),
                 scheme: env::var("PAAPI_SCHEME").unwrap_or_else(|_| "https".into()),
+            },
+            cj: CjConfig {
+                api_key: env::var("CJ_API_KEY").ok(),
+                website_id: env::var("CJ_WEBSITE_ID").ok(),
+                advertiser_id: env::var("CJ_REI_ADVERTISER_ID").ok(),
+                endpoint: env::var("CJ_API_URL")
+                    .unwrap_or_else(|_| "https://ads.api.cj.com/query".into()),
             },
         })
     }
