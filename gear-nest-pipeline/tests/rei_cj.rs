@@ -146,6 +146,18 @@ fn merge_does_not_overwrite_present_supplement_fields() {
     assert_eq!(merged.description.as_deref(), Some("CJ description"));
 }
 
+#[test]
+fn scraped_gtin_is_never_adopted() {
+    // GTIN drives Tier-1 entity resolution (ADR-007); REI trusts only CJ's GTIN
+    // (ADR-0023). A scraped GTIN must not be used even when CJ omits one.
+    let mut cj = sample_cj();
+    cj.gtin = None;
+    let mut scraped = sample_cj();
+    scraped.gtin = Some("0000000000000".into());
+    let merged = merge_supplement(cj, scraped);
+    assert_eq!(merged.gtin, None);
+}
+
 fn sample_cj() -> RawProduct {
     RawProduct {
         store_id: "rei".into(),
