@@ -20,7 +20,7 @@ use sha2::{Digest, Sha256};
 use tracing::{debug, warn};
 
 use crate::config::PaapiConfig;
-use crate::models::RawProduct;
+use crate::models::{PriceUpdate, RawProduct};
 use crate::scrapers::StoreCrawler;
 
 const STORE_ID: &str = "amazon";
@@ -166,6 +166,22 @@ impl StoreCrawler for AmazonScraper {
             }
         }
         Ok(out)
+    }
+
+    async fn fetch_price(&self, store_product_id: &str) -> Result<PriceUpdate> {
+        let resp = self.get_items(&[store_product_id.to_string()]).await?;
+        let item = resp
+            .items_result
+            .and_then(|r| r.items.into_iter().next())
+            .with_context(|| format!("PA-API returned no item for {store_product_id}"))?;
+        let raw = item_to_raw(&item);
+        Ok(PriceUpdate {
+            store_id: STORE_ID.to_string(),
+            store_product_id: store_product_id.to_string(),
+            price: raw.price,
+            in_stock: raw.in_stock,
+            fetched_at: Utc::now(),
+        })
     }
 }
 

@@ -9,7 +9,7 @@ use gear_nest_pipeline::{
     db,
     embeddings::HuggingFaceEmbedder,
     entity_resolution::Resolver,
-    normalizer, price_history,
+    normalizer, price_history, price_sync,
     prices::PriceWriter,
     scrapers::{amazon::AmazonScraper, record_raw, StoreCrawler},
 };
@@ -40,6 +40,9 @@ enum Cmd {
     },
     /// Ensure the next two months of `price_history` partitions exist.
     EnsurePartitions,
+    /// Run one full price sync across all 8 stores, then exit. Scheduling is
+    /// external (Cloud Scheduler → one-shot Cloud Run Job), per ADR-0022.
+    PriceSync,
 }
 
 #[tokio::main]
@@ -67,6 +70,7 @@ async fn main() -> Result<()> {
             let pool = db::connect(&cfg.database_url).await?;
             price_history::ensure_partitions(&pool, Utc::now()).await?;
         }
+        Cmd::PriceSync => run_price_sync(&cfg).await?,
         Cmd::ScrapeAmazon { asins, from_file } => {
             let asins = resolve_asins(asins, from_file.as_deref())?;
             info!(count = asins.len(), "scrape-amazon");
@@ -147,6 +151,20 @@ async fn main() -> Result<()> {
             }
         }
     }
+    Ok(())
+}
+
+async fn run_price_sync(cfg: &Config) -> Result<()> {
+    let pool = db::connect(&cfg.database_url).await?;
+    price_history::ensure_partitions(&pool, Utc::now()).await?;
+    let mut writer = PriceWriter::connect(&cfg.redis_url).await?;
+    let report = price_sync::run(cfg, &pool, &mut writer).await?;
+    info!(
+        synced = report.synced,
+        skipped = report.skipped,
+        failed = report.failed,
+        "price-sync done"
+    );
     Ok(())
 }
 

@@ -18,5 +18,6 @@ pub mod entity_resolution;
 pub mod models;
 pub mod normalizer;
 pub mod price_history;
+pub mod price_sync;
 pub mod prices;
 pub mod scrapers;
