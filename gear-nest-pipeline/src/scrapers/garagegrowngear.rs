@@ -9,7 +9,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use tracing::warn;
 
-use crate::models::{Category, PriceUpdate, RawProduct};
+use crate::models::{Category, PriceUpdate, RawProduct, RawReview};
 use crate::scrapers::transport::{Tier, Transport};
 use crate::scrapers::{jsonld, StoreCrawler};
 
@@ -82,6 +82,19 @@ impl StoreCrawler for GarageGrownGearScraper {
         let url = Self::product_url(store_product_id);
         let html = self.transport.get(&url).await?;
         jsonld::parse_price(&html, STORE_ID, store_product_id)
+    }
+
+    /// Shopify review apps (Judge.me, Loox, Stamped, Yotpo) embed the first
+    /// page of reviews into the product page's JSON-LD for SEO and render the
+    /// rest via JS, so a clean-HTTP scrape gets whatever's on the page in one
+    /// request. No pagination — the caller's `max` only caps an unusually
+    /// generous first page.
+    async fn fetch_reviews(&self, store_product_id: &str, max: usize) -> Result<Vec<RawReview>> {
+        let url = Self::product_url(store_product_id);
+        let html = self.transport.get(&url).await?;
+        let mut reviews = jsonld::parse_reviews(&html, STORE_ID, store_product_id);
+        reviews.truncate(max);
+        Ok(reviews)
     }
 
     fn categories(&self) -> Vec<Category> {
