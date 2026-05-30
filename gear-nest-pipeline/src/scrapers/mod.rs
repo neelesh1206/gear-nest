@@ -9,7 +9,7 @@ use sqlx::postgres::PgPool;
 use tracing::info;
 use uuid::Uuid;
 
-use crate::models::{Category, PriceUpdate, RawProduct};
+use crate::models::{Category, PriceUpdate, RawProduct, RawReview};
 
 pub mod amazon;
 pub mod backcountry;
@@ -63,6 +63,13 @@ pub trait StoreCrawler: Send + Sync {
     /// daily price-sync across all tiers.
     async fn fetch_price(&self, _store_product_id: &str) -> Result<PriceUpdate> {
         anyhow::bail!("{} does not implement fetch_price", self.store_id())
+    }
+
+    /// Fetch up to `max` reviews for a known product (Phase 3 / SPEC §13).
+    /// Implementations paginate internally and stop once `max` is reached or
+    /// the source runs out. Default bails so a store can opt in incrementally.
+    async fn fetch_reviews(&self, _store_product_id: &str, _max: usize) -> Result<Vec<RawReview>> {
+        anyhow::bail!("{} does not implement fetch_reviews", self.store_id())
     }
 }
 

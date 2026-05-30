@@ -9,7 +9,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use tracing::warn;
 
-use crate::models::{Category, PriceUpdate, RawProduct};
+use crate::models::{Category, PriceUpdate, RawProduct, RawReview};
 use crate::scrapers::transport::{Tier, Transport};
 use crate::scrapers::{jsonld, StoreCrawler};
 
@@ -17,6 +17,11 @@ const STORE_ID: &str = "campsaver";
 const BASE_URL: &str = "https://www.campsaver.com";
 /// Cap per category crawl so one run cannot fan out unbounded.
 const MAX_PRODUCTS_PER_CATEGORY: usize = 60;
+/// Reviews pagination safety cap for the `?reviews_page=N` walk. The caller's
+/// `max` (typically the SPEC §13 cap of 500 reviews/product) is the real
+/// bound; this is only here to stop a runaway loop if a page never returns
+/// empty for some reason.
+const MAX_REVIEW_PAGES: u32 = 50;
 
 /// Full-sync seed categories. Slugs come from the live site's category URL
 /// scheme (`/tents-shelters`, etc.). Kept small on purpose — five mainstream
@@ -53,6 +58,12 @@ impl CampSaverScraper {
             format!("{BASE_URL}/{}", store_product_id.trim_matches('/'))
         }
     }
+
+    fn reviews_page_url(store_product_id: &str, page: u32) -> String {
+        let base = Self::product_url(store_product_id);
+        let sep = if base.contains('?') { '&' } else { '?' };
+        format!("{base}{sep}reviews_page={page}")
+    }
 }
 
 #[async_trait]
@@ -81,6 +92,39 @@ impl StoreCrawler for CampSaverScraper {
         let url = Self::product_url(store_product_id);
         let html = self.transport.get(&url).await?;
         jsonld::parse_price(&html, STORE_ID, store_product_id)
+    }
+
+    async fn fetch_reviews(&self, store_product_id: &str, max: usize) -> Result<Vec<RawReview>> {
+        let mut out: Vec<RawReview> = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for page in 1..=MAX_REVIEW_PAGES {
+            if out.len() >= max {
+                break;
+            }
+            let url = Self::reviews_page_url(store_product_id, page);
+            let html = match self.transport.get(&url).await {
+                Ok(h) => h,
+                Err(e) => {
+                    warn!(url, error = %e, "campsaver: reviews fetch skipped");
+                    break;
+                }
+            };
+            let batch = jsonld::parse_reviews(&html, STORE_ID, store_product_id);
+            let mut new_in_batch = 0;
+            for r in batch {
+                if out.len() >= max {
+                    break;
+                }
+                if seen.insert(r.source_review_id.clone()) {
+                    out.push(r);
+                    new_in_batch += 1;
+                }
+            }
+            if new_in_batch == 0 {
+                break;
+            }
+        }
+        Ok(out)
     }
 
     fn categories(&self) -> Vec<Category> {
