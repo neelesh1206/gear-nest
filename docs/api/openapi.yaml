@@ -183,8 +183,33 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [jobId]
                 properties:
-                  jobId: { type: string }
+                  jobId: { type: string, format: uuid }
+
+  /api/admin/jobs/{jobId}/status:
+    get:
+      tags: [admin]
+      summary: Poll the status of an admin background job
+      description: |
+        Polled by the admin UI after a reassign returns 202 with a jobId.
+        Backed by `CandidateService.jobFuture(jobId)` (a `CompletableFuture<Void>`).
+        Status mapping:
+          - `running`   → future is not yet done
+          - `completed` → future completed normally
+          - `failed`    → future completed exceptionally (or was cancelled);
+                         `error` carries the exception message
+        404 if the jobId is unknown (never dispatched, or evicted).
+      parameters:
+        - { name: jobId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Job status snapshot
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobStatus" }
+        "404":
+          $ref: "#/components/responses/NotFound"
 
 components:
   responses:
@@ -354,3 +379,16 @@ components:
         cons:        { type: array, items: { type: string } }
         reviewCount: { type: integer }
         generatedAt: { type: string, format: date-time }
+
+    JobStatus:
+      type: object
+      required: [jobId, status]
+      properties:
+        jobId:  { type: string, format: uuid }
+        status:
+          type: string
+          enum: [running, completed, failed]
+        error:
+          type: string
+          nullable: true
+          description: Exception message when status=failed; null otherwise.
