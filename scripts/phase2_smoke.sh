@@ -21,9 +21,6 @@
 #   SMOKE_ASINS="B07X... B08Y..."   ASINs for the Amazon single-store stage
 #                                    (default: a small built-in set)
 #   SMOKE_KEEP=1                     leave the stack running on exit (default: down)
-#   SMOKE_STORES="campsaver garagerowngear"
-#                                    cred-free clean-HTTP stores to crawl in the
-#                                    multi-store stage (default shown)
 #
 # Creds (read from .env.local via docker-compose env_file; all optional):
 #   PAAPI_ACCESS_KEY / PAAPI_SECRET_KEY / PAAPI_PARTNER_TAG  -> Amazon stage
@@ -81,6 +78,18 @@ if [[ "$(docker compose ps --format '{{.Health}}' postgres 2>/dev/null)" == "hea
   pass "postgres + redis healthy"
 else
   fail "postgres/redis did not become healthy"; exit 1
+fi
+
+# ---------------------------------------------------------------------------
+stage "Stage 1.5 — rebuild pipeline image from current source"
+# docker compose run --rm reuses a cached image and does not auto-rebuild on
+# source changes, so a stale binary can mask a fix that has already landed
+# on main (e.g. a smoke run reporting `full-sync` missing while it sits in
+# the source tree). Always rebuild so the harness exercises current code.
+if docker compose build pipeline >/dev/null 2>&1; then
+  pass "pipeline image rebuilt"
+else
+  fail "pipeline image build failed — run 'docker compose build pipeline' to see logs"; exit 1
 fi
 
 # ---------------------------------------------------------------------------
@@ -145,14 +154,17 @@ ${rst}
 EOF
 else
   pass "found ingestion subcommand: '$crawl_cmd'"
-  stores="${SMOKE_STORES:-campsaver garagerowngear}"
-  for s in $stores; do
-    if "${PIPELINE[@]}" "$crawl_cmd" --store "$s" >/dev/null 2>&1; then
-      pass "crawled $s"
-    else
-      fail "crawl failed for $s (live site flake or transport issue)"
-    fi
-  done
+  # full-sync crawls every scrape store's curated category seeds and persists
+  # via normalize → resolve → embed → upsert (per ADR-0022 it's one-shot, no
+  # daemon). Stores missing creds (proxy-tier without SCRAPE_PROXY_*) or
+  # hitting transient errors are logged and skipped; cred-free clean-HTTP
+  # stores (CampSaver, Garage Grown Gear) should still produce the cross-
+  # store ingest needed for Stage 5.
+  if "${PIPELINE[@]}" "$crawl_cmd" >/dev/null 2>&1; then
+    pass "$crawl_cmd completed"
+  else
+    fail "$crawl_cmd exited non-zero — re-run without redirection to see logs"
+  fi
 
   # ----- Stage 5 — cross-store resolution -----
   stage "Stage 5 — cross-store entity resolution"
