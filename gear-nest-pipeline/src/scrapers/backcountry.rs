@@ -10,7 +10,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use tracing::warn;
 
-use crate::models::{Category, PriceUpdate, RawProduct};
+use crate::models::{Category, PriceUpdate, RawProduct, RawReview};
 use crate::scrapers::transport::{Tier, Transport};
 use crate::scrapers::{jsonld, StoreCrawler};
 
@@ -80,6 +80,18 @@ impl StoreCrawler for BackcountryScraper {
         let url = Self::product_url(store_product_id);
         let html = self.transport.get(&url).await?;
         jsonld::parse_price(&html, STORE_ID, store_product_id)
+    }
+
+    /// SFCC product pages embed Review JSON-LD inline for SEO; the
+    /// Bazaarvoice/PowerReviews widget renders deeper pages via JS, so a
+    /// single proxy fetch is the honest clean scrape. Caller `max` caps the
+    /// first page.
+    async fn fetch_reviews(&self, store_product_id: &str, max: usize) -> Result<Vec<RawReview>> {
+        let url = Self::product_url(store_product_id);
+        let html = self.transport.get(&url).await?;
+        let mut reviews = jsonld::parse_reviews(&html, STORE_ID, store_product_id);
+        reviews.truncate(max);
+        Ok(reviews)
     }
 
     fn categories(&self) -> Vec<Category> {
