@@ -89,7 +89,7 @@ fn rating_is_clamped_and_parsed_from_string_or_number() {
 }
 
 #[test]
-fn hashes_reviewer_per_store_when_named_else_null() {
+fn hashes_named_reviewer_else_null() {
     let reviews = parse_reviews(REVIEWS_HTML, STORE_ID, PRODUCT_ID);
 
     let sarah = reviews
@@ -120,6 +120,28 @@ fn hashes_reviewer_per_store_when_named_else_null() {
     assert!(
         anon.reviewer_id_hash.is_none(),
         "literal 'Anonymous' is not a stable identifier"
+    );
+}
+
+/// The whole point of `reviews.reviewer_id_hash` per SPEC §13 Stage 1 is
+/// to collapse the same reviewer across stores. The hash must therefore
+/// be store-independent.
+#[test]
+fn same_reviewer_collides_across_stores_for_dedup() {
+    let campsaver = parse_reviews(REVIEWS_HTML, "campsaver", PRODUCT_ID);
+    let rei = parse_reviews(REVIEWS_HTML, "rei", PRODUCT_ID);
+    let sarah_cs = campsaver
+        .iter()
+        .find(|r| r.body.starts_with("Used this on a week-long"))
+        .unwrap();
+    let sarah_rei = rei
+        .iter()
+        .find(|r| r.body.starts_with("Used this on a week-long"))
+        .unwrap();
+    assert_eq!(
+        sarah_cs.reviewer_id_hash, sarah_rei.reviewer_id_hash,
+        "same author name across stores must hash identically — \
+         otherwise Stage-1 cross-store dedup (PR 7) cannot match"
     );
 }
 

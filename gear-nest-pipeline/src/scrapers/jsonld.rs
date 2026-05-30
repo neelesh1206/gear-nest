@@ -146,10 +146,15 @@ fn parse_one_review(node: &Value, store_id: &str, store_product_id: &str) -> Opt
         .and_then(author_display_name)
         .map(|s| clean_text(&s))
         .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("anonymous"));
+    // Hash the bare author name (no `store_id` prefix) so the same reviewer
+    // across stores collapses to the same hash. That's the load-bearing
+    // property of `reviews.reviewer_id_hash` for SPEC §13 Stage-1 cross-store
+    // dedup (PR 7). False-positive risk is bounded by the dedup scope, which
+    // is `(product_id, reviewer_id_hash)` — two "Sarah K."s reviewing the
+    // *same product* at two stores is rare and a verified-purchase tiebreak
+    // keeps the more credible row.
     let reviewer_id_hash = author_name.as_deref().map(|name| {
         let mut h = Sha256::new();
-        h.update(store_id.to_lowercase().as_bytes());
-        h.update(b":");
         h.update(name.to_lowercase().as_bytes());
         hex::encode(h.finalize())
     });
