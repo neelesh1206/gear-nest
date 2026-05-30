@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -81,6 +81,24 @@ pub struct PriceRecord {
 pub struct Category {
     pub slug: String,
     pub label: String,
+}
+
+/// A single review scraped from a store, before persistence. Stable
+/// `source_review_id` is required (the parser falls back to a content hash
+/// when the page exposes no native ID) so the `UNIQUE(store_id, source_review_id)`
+/// constraint can dedupe re-imports.
+#[derive(Debug, Clone)]
+pub struct RawReview {
+    pub store_id: String,
+    pub store_product_id: String,
+    pub source_review_id: String,
+    pub reviewer_id_hash: Option<String>,
+    pub rating: i16,
+    pub title: Option<String>,
+    pub body: String,
+    pub verified_purchase: bool,
+    pub helpful_votes: i32,
+    pub review_date: Option<NaiveDate>,
 }
 
 /// A price/stock snapshot fetched straight from a store, before the canonical

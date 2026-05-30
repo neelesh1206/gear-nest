@@ -10,6 +10,7 @@
 //! * [`embeddings`]        — `HuggingFace` batched embed → pgvector bulk insert.
 //! * [`prices`]            — stale-while-revalidate Redis writer (ADR-009).
 //! * [`price_history`]     — partition-aware append + idempotent DDL (ADR-010).
+//! * [`reviews`]           — idempotent review persistence (SPEC §13, Phase 3).
 
 pub mod config;
 pub mod db;
@@ -21,4 +22,5 @@ pub mod normalizer;
 pub mod price_history;
 pub mod price_sync;
 pub mod prices;
+pub mod reviews;
 pub mod scrapers;
