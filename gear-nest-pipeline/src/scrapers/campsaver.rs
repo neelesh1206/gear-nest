@@ -17,9 +17,11 @@ const STORE_ID: &str = "campsaver";
 const BASE_URL: &str = "https://www.campsaver.com";
 /// Cap per category crawl so one run cannot fan out unbounded.
 const MAX_PRODUCTS_PER_CATEGORY: usize = 60;
-/// Reviews pagination safety cap. `CampSaver` paginates via `?reviews_page=N`;
-/// 20 pages × ~10 reviews/page covers the SPEC §13 cap of 500 reviews/product.
-const MAX_REVIEW_PAGES: u32 = 20;
+/// Reviews pagination safety cap for the `?reviews_page=N` walk. The caller's
+/// `max` (typically the SPEC §13 cap of 500 reviews/product) is the real
+/// bound; this is only here to stop a runaway loop if a page never returns
+/// empty for some reason.
+const MAX_REVIEW_PAGES: u32 = 50;
 
 /// Full-sync seed categories. Slugs come from the live site's category URL
 /// scheme (`/tents-shelters`, etc.). Kept small on purpose — five mainstream

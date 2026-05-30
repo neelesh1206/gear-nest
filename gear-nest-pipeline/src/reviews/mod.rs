@@ -1,8 +1,11 @@
 //! Idempotent persistence of scraped reviews into the `reviews` table.
 //!
 //! `UNIQUE(store_id, source_review_id)` (migration 0001) handles same-store
-//! re-imports; we `ON CONFLICT` refresh `helpful_votes` + `scraped_at` so a
-//! re-run keeps vote counts fresh without inserting duplicates. Cross-store
+//! re-imports; we `ON CONFLICT` refresh every mutable field (`rating`,
+//! `title`, `body`, `verified_purchase`, `helpful_votes`, `review_date`,
+//! `scraped_at`) so an edit at the source (Amazon lets reviewers update
+//! their text; helpful counts drift) lands on the next re-scrape. Identity
+//! columns (`product_id`, `reviewer_id_hash`) stay put. Cross-store
 //! reviewer dedup is a separate pass (Phase 3 PR 7 / SPEC §13 Stage 1).
 
 use anyhow::Result;
@@ -43,7 +46,13 @@ pub async fn upsert_batch(pool: &PgPool, product_id: Uuid, raws: &[RawReview]) -
     sql.push_str(&placeholders.join(","));
     sql.push_str(
         " ON CONFLICT (store_id, source_review_id) DO UPDATE \
-         SET helpful_votes = EXCLUDED.helpful_votes, scraped_at = NOW()",
+         SET rating = EXCLUDED.rating, \
+             title = EXCLUDED.title, \
+             body = EXCLUDED.body, \
+             verified_purchase = EXCLUDED.verified_purchase, \
+             helpful_votes = EXCLUDED.helpful_votes, \
+             review_date = EXCLUDED.review_date, \
+             scraped_at = NOW()",
     );
 
     let mut q = sqlx::query(&sql);
