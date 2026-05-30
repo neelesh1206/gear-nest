@@ -81,6 +81,18 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+stage "Stage 1.5 — rebuild pipeline image from current source"
+# docker compose run --rm reuses a cached image and does not auto-rebuild on
+# source changes, so a stale binary can mask a fix that has already landed
+# on main (e.g. a smoke run reporting `full-sync` missing while it sits in
+# the source tree). Always rebuild so the harness exercises current code.
+if docker compose build pipeline >/dev/null 2>&1; then
+  pass "pipeline image rebuilt"
+else
+  fail "pipeline image build failed — run 'docker compose build pipeline' to see logs"; exit 1
+fi
+
+# ---------------------------------------------------------------------------
 stage "Stage 2 — schema present"
 # Postgres applies supabase/migrations via its /docker-entrypoint-initdb.d mount
 # on first init, so the schema is already there. We do NOT run `pipeline migrate`
