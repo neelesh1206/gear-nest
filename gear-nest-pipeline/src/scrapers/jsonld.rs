@@ -9,11 +9,12 @@
 use std::sync::LazyLock;
 
 use anyhow::{Context, Result};
-use chrono::Utc;
+use chrono::{NaiveDate, Utc};
 use regex::Regex;
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 
-use crate::models::{PriceUpdate, RawProduct};
+use crate::models::{PriceUpdate, RawProduct, RawReview};
 
 /// Extract a `RawProduct` from a product page's JSON-LD.
 pub fn parse_product(html: &str, url: &str, store_id: &str) -> Result<RawProduct> {
@@ -95,6 +96,151 @@ pub fn parse_price(html: &str, store_id: &str, store_product_id: &str) -> Result
             .map(availability_in_stock),
         fetched_at: Utc::now(),
     })
+}
+
+/// Extract reviews embedded in a product page's JSON-LD.
+///
+/// Reviews may live either as `Product.review[]` or as standalone `Review`
+/// nodes in an `@graph`. Both are surfaced. The schema.org core carries
+/// rating + body + author + date but not retailer extensions like
+/// `verified_purchase` or `helpful_votes`; those default to `false` / `0`
+/// and are filled in by per-store parsers when the markup exposes them.
+///
+/// `source_review_id` is always populated: prefer the page's `@id` /
+/// `identifier`, else a stable SHA-256 of the review content so the
+/// `UNIQUE(store_id, source_review_id)` constraint can dedupe re-imports.
+pub fn parse_reviews(html: &str, store_id: &str, store_product_id: &str) -> Vec<RawReview> {
+    let nodes = extract_ld_json(html);
+    let mut out: Vec<RawReview> = Vec::new();
+    for product in nodes.iter().filter(|n| ld_type_matches(n, "Product")) {
+        if let Some(arr) = product.get("review").and_then(Value::as_array) {
+            for r in arr {
+                if let Some(rev) = parse_one_review(r, store_id, store_product_id) {
+                    out.push(rev);
+                }
+            }
+        }
+    }
+    for r in nodes.iter().filter(|n| ld_type_matches(n, "Review")) {
+        if let Some(rev) = parse_one_review(r, store_id, store_product_id) {
+            out.push(rev);
+        }
+    }
+    dedup_reviews_by_source_id(out)
+}
+
+fn parse_one_review(node: &Value, store_id: &str, store_product_id: &str) -> Option<RawReview> {
+    let body = node
+        .get("reviewBody")
+        .or_else(|| node.get("description"))
+        .and_then(Value::as_str)
+        .map(clean_text)
+        .filter(|b| !b.is_empty())?;
+    let rating = node
+        .get("reviewRating")
+        .and_then(|r| r.get("ratingValue"))
+        .and_then(json_f32)
+        .map(rating_bucket)?;
+    let author_name = node
+        .get("author")
+        .and_then(author_display_name)
+        .map(|s| clean_text(&s))
+        .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("anonymous"));
+    let reviewer_id_hash = author_name.as_deref().map(|name| {
+        let mut h = Sha256::new();
+        h.update(store_id.to_lowercase().as_bytes());
+        h.update(b":");
+        h.update(name.to_lowercase().as_bytes());
+        hex::encode(h.finalize())
+    });
+    let review_date = node
+        .get("datePublished")
+        .and_then(Value::as_str)
+        .and_then(parse_review_date);
+    let title = node
+        .get("name")
+        .or_else(|| node.get("headline"))
+        .and_then(Value::as_str)
+        .map(clean_text)
+        .filter(|t| !t.is_empty());
+    let source_review_id = native_review_id(node)
+        .unwrap_or_else(|| content_hash_id(&body, author_name.as_deref(), review_date.as_ref()));
+    Some(RawReview {
+        store_id: store_id.to_string(),
+        store_product_id: store_product_id.to_string(),
+        source_review_id,
+        reviewer_id_hash,
+        rating,
+        title,
+        body,
+        verified_purchase: false,
+        helpful_votes: 0,
+        review_date,
+    })
+}
+
+/// Bucket a schema.org rating value into the integer 1..=5 stored in the
+/// `reviews.rating` column. Half-stars round, out-of-range values clamp.
+fn rating_bucket(f: f32) -> i16 {
+    if f <= 1.5 {
+        1
+    } else if f <= 2.5 {
+        2
+    } else if f <= 3.5 {
+        3
+    } else if f <= 4.5 {
+        4
+    } else {
+        5
+    }
+}
+
+fn author_display_name(author: &Value) -> Option<String> {
+    match author {
+        Value::String(s) => Some(s.clone()),
+        Value::Object(_) => author
+            .get("name")
+            .and_then(Value::as_str)
+            .map(str::to_string),
+        Value::Array(arr) => arr.first().and_then(author_display_name),
+        _ => None,
+    }
+}
+
+fn native_review_id(node: &Value) -> Option<String> {
+    ["@id", "identifier", "url"]
+        .iter()
+        .find_map(|k| node.get(*k).and_then(Value::as_str))
+        .map(str::to_string)
+}
+
+fn content_hash_id(body: &str, author: Option<&str>, date: Option<&NaiveDate>) -> String {
+    let mut h = Sha256::new();
+    h.update(body.as_bytes());
+    h.update(b"|");
+    h.update(author.unwrap_or("").as_bytes());
+    h.update(b"|");
+    h.update(date.map_or(String::new(), ToString::to_string).as_bytes());
+    format!("sha256:{}", hex::encode(h.finalize()))
+}
+
+/// schema.org `datePublished` is ISO-8601. We accept either a bare date
+/// (`2025-03-15`) or a full timestamp (`2025-03-15T12:34:56Z`) and store
+/// only the date.
+fn parse_review_date(s: &str) -> Option<NaiveDate> {
+    NaiveDate::parse_from_str(s, "%Y-%m-%d").ok().or_else(|| {
+        s.split('T')
+            .next()
+            .and_then(|d| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
+    })
+}
+
+fn dedup_reviews_by_source_id(reviews: Vec<RawReview>) -> Vec<RawReview> {
+    let mut seen = std::collections::HashSet::new();
+    reviews
+        .into_iter()
+        .filter(|r| seen.insert(r.source_review_id.clone()))
+        .collect()
 }
 
 /// Product-page URLs from a category listing page: prefer a structured
