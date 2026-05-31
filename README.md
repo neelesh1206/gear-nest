@@ -26,11 +26,51 @@ Parallel implementation guide: [`SPEC.md` §19](./SPEC.md#19-parallel-implementa
 
 ## Quick Start (Local)
 
+**One command brings up the whole stack with seeded demo data:**
+
+```bash
+./scripts/local_demo.sh
+```
+
+This boots Postgres + Redis + the Spring Boot API in Docker (Colima),
+seeds 5 outdoor products with cross-store listings + live Redis prices,
+then starts the Next.js web app on the host. When it prints `Ready.`,
+open **http://localhost:3000**.
+
+Try the price-comparison view — each product has 3–4 store quotes ranked
+by `BestValueScorer`:
+
+- `/products/osprey-atmos-ag-65` (4 stores)
+- `/products/black-diamond-spot-400` (4 stores)
+- `/products/msr-pocketrocket-2` (3 stores)
+
+Tear down: `./scripts/local_demo.sh down`.
+
+**Requirements:** Docker (we use [Colima](https://github.com/abiosoft/colima)
+on macOS to avoid Docker Desktop licensing), and Node 20+ (`npm install`
+once in `gear-nest-web/`).
+
+**Just the infra (no seed, no API):**
+
 ```bash
 docker compose up -d postgres redis
 ```
 
 The schema in `supabase/migrations/0001_initial_schema.sql` is applied automatically on first boot.
+
+### Validating across services
+
+The end-to-end live smoke test (multi-store ingest → cross-store entity
+resolution → Redis price comparison → API `/prices`) is a separate manual
+harness:
+
+```bash
+./scripts/phase2_smoke.sh
+```
+
+Manual, live, and not a CI gate (it hits real retailer sites). CI keeps
+gating on per-service deterministic tests; this harness is the by-hand
+check that cross-service seams actually connect on real data.
 
 ---
 
