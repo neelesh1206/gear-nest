@@ -20,8 +20,9 @@ use sha2::{Digest, Sha256};
 use tracing::{debug, warn};
 
 use crate::config::PaapiConfig;
-use crate::models::{PriceUpdate, RawProduct};
-use crate::scrapers::StoreCrawler;
+use crate::models::{PriceUpdate, RawProduct, RawReview};
+use crate::scrapers::transport::{Tier, Transport};
+use crate::scrapers::{jsonld, StoreCrawler};
 
 const STORE_ID: &str = "amazon";
 const BATCH_SIZE: usize = 10;
@@ -33,6 +34,11 @@ pub struct AmazonScraper {
     client: Client,
     config: PaapiConfig,
     marketplace: String,
+    /// PA-API 5.0 returns only aggregate review counts
+    /// (`CustomerReviews.Count` and `CustomerReviews.StarRating`), not
+    /// individual review text. Individual reviews come from scraping
+    /// `amazon.com/product-reviews/{ASIN}/`.
+    review_scrape: Box<dyn Transport>,
 }
 
 impl AmazonScraper {
@@ -46,6 +52,7 @@ impl AmazonScraper {
             client,
             config,
             marketplace: "www.amazon.com".into(),
+            review_scrape: Tier::CleanHttp.transport(STORE_ID)?,
         })
     }
 
@@ -182,6 +189,24 @@ impl StoreCrawler for AmazonScraper {
             in_stock: raw.in_stock,
             fetched_at: Utc::now(),
         })
+    }
+
+    /// PA-API 5.0 has no individual-review resource — `CustomerReviews.Count`
+    /// and `CustomerReviews.StarRating` are aggregate only, already pulled
+    /// into `RawProduct.store_rating` / `store_review_count` by `fetch_batch`.
+    /// So individual reviews come from scraping
+    /// `amazon.com/product-reviews/{ASIN}/`. Amazon's anti-bot is aggressive
+    /// — expect frequent CAPTCHAs / 503s in live runs; the caller logs and
+    /// moves on. The page server-renders the first review batch with
+    /// schema.org `Review` markup, which the shared parser already handles.
+    /// Caller `max` caps the result; we do not chase `?pageNumber=N` because
+    /// deeper pages typically trip the CAPTCHA wall.
+    async fn fetch_reviews(&self, store_product_id: &str, max: usize) -> Result<Vec<RawReview>> {
+        let url = format!("https://www.amazon.com/product-reviews/{store_product_id}/");
+        let html = self.review_scrape.get(&url).await?;
+        let mut reviews = jsonld::parse_reviews(&html, STORE_ID, store_product_id);
+        reviews.truncate(max);
+        Ok(reviews)
     }
 }
 
