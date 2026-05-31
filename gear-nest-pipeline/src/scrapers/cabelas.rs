@@ -11,7 +11,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use tracing::warn;
 
-use crate::models::{Category, PriceUpdate, RawProduct};
+use crate::models::{Category, PriceUpdate, RawProduct, RawReview};
 use crate::scrapers::transport::{Tier, Transport};
 use crate::scrapers::{jsonld, StoreCrawler};
 
@@ -82,6 +82,20 @@ impl StoreCrawler for CabelasScraper {
         let url = Self::product_url(store_product_id);
         let html = self.transport.get(&url).await?;
         jsonld::parse_price(&html, STORE_ID, store_product_id)
+    }
+
+    /// Cabela's review section is a Bazaarvoice widget rendered after page
+    /// load. The headless transport waits for render and snapshots the DOM,
+    /// so post-render JSON-LD (Bazaarvoice injects `<script type="ld+json">`
+    /// for the loaded review batch) feeds the shared parser. Pagination
+    /// happens inside the widget; a single render captures the first page.
+    /// Caller `max` caps the snapshot.
+    async fn fetch_reviews(&self, store_product_id: &str, max: usize) -> Result<Vec<RawReview>> {
+        let url = Self::product_url(store_product_id);
+        let html = self.transport.get(&url).await?;
+        let mut reviews = jsonld::parse_reviews(&html, STORE_ID, store_product_id);
+        reviews.truncate(max);
+        Ok(reviews)
     }
 
     fn categories(&self) -> Vec<Category> {
