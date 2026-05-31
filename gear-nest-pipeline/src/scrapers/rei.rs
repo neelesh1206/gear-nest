@@ -17,7 +17,7 @@ use serde_json::{json, Value};
 use tracing::warn;
 
 use crate::config::CjConfig;
-use crate::models::{Category, PriceUpdate, RawProduct};
+use crate::models::{Category, PriceUpdate, RawProduct, RawReview};
 use crate::scrapers::transport::{Tier, Transport};
 use crate::scrapers::{jsonld, StoreCrawler};
 
@@ -162,6 +162,28 @@ impl StoreCrawler for ReiScraper {
             in_stock: item.in_stock,
             fetched_at: Utc::now(),
         })
+    }
+
+    /// REI reviews are scrape-only — CJ has no review endpoint. If the caller
+    /// already knows the product URL (sync-reviews passes `listing.store_url`
+    /// when available), skip the CJ lookup; otherwise resolve `id → URL` via
+    /// CJ the same way [`Self::fetch_price`] does.
+    async fn fetch_reviews(&self, store_product_id: &str, max: usize) -> Result<Vec<RawReview>> {
+        let url = if store_product_id.starts_with("http") {
+            store_product_id.to_string()
+        } else {
+            self.cj
+                .search(store_product_id)
+                .await?
+                .into_iter()
+                .find(|p| p.store_product_id == store_product_id)
+                .context("CJ returned no product for the requested id")?
+                .url
+        };
+        let html = self.scrape.get(&url).await?;
+        let mut reviews = jsonld::parse_reviews(&html, STORE_ID, store_product_id);
+        reviews.truncate(max);
+        Ok(reviews)
     }
 
     fn categories(&self) -> Vec<Category> {
