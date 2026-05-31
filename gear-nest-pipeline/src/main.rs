@@ -6,12 +6,13 @@ use tracing_subscriber::EnvFilter;
 
 use gear_nest_pipeline::{
     config::Config,
-    db,
+    db, dedup_reviews,
     embeddings::HuggingFaceEmbedder,
     entity_resolution::Resolver,
     full_sync, normalizer, price_history, price_sync,
     prices::PriceWriter,
     scrapers::{amazon::AmazonScraper, record_raw, StoreCrawler},
+    sync_reviews,
 };
 
 #[derive(Parser)]
@@ -49,6 +50,13 @@ enum Cmd {
     /// `price-sync` depends on. Scheduled externally (`0 2 * * 0` weekly) per
     /// ADR-0022.
     FullSync,
+    /// Fetch up to 500 reviews per active `store_listing` (EXACT/HIGH/MEDIUM),
+    /// upsert idempotently. Per-store rate limits shared with price-sync.
+    /// Scheduled externally per ADR-0022, wired in Phase 5.
+    SyncReviews,
+    /// SPEC §13 Stage-1 cross-store dedup: collapse `(product_id,
+    /// reviewer_id_hash)` groups, keeping the most credible row. Idempotent.
+    DedupReviews,
 }
 
 #[tokio::main]
@@ -78,6 +86,8 @@ async fn main() -> Result<()> {
         }
         Cmd::PriceSync => run_price_sync(&cfg).await?,
         Cmd::FullSync => run_full_sync(&cfg).await?,
+        Cmd::SyncReviews => run_sync_reviews(&cfg).await?,
+        Cmd::DedupReviews => run_dedup_reviews(&cfg).await?,
         Cmd::ScrapeAmazon { asins, from_file } => {
             let asins = resolve_asins(asins, from_file.as_deref())?;
             info!(count = asins.len(), "scrape-amazon");
@@ -191,6 +201,26 @@ async fn run_full_sync(cfg: &Config) -> Result<()> {
         stores_skipped = report.stores_skipped,
         "full-sync done"
     );
+    Ok(())
+}
+
+async fn run_sync_reviews(cfg: &Config) -> Result<()> {
+    let pool = db::connect(&cfg.database_url).await?;
+    let report = sync_reviews::run(cfg, &pool).await?;
+    info!(
+        listings_processed = report.listings_processed,
+        reviews_upserted = report.reviews_upserted,
+        listings_skipped = report.listings_skipped,
+        listings_failed = report.listings_failed,
+        "sync-reviews done"
+    );
+    Ok(())
+}
+
+async fn run_dedup_reviews(cfg: &Config) -> Result<()> {
+    let pool = db::connect(&cfg.database_url).await?;
+    let report = dedup_reviews::run(&pool).await?;
+    info!(deleted = report.deleted, "dedup-reviews done");
     Ok(())
 }
 

@@ -14,6 +14,7 @@
 
 pub mod config;
 pub mod db;
+pub mod dedup_reviews;
 pub mod embeddings;
 pub mod entity_resolution;
 pub mod full_sync;
@@ -24,3 +25,4 @@ pub mod price_sync;
 pub mod prices;
 pub mod reviews;
 pub mod scrapers;
+pub mod sync_reviews;
